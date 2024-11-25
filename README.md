@@ -1,2 +1,2 @@
 # laGPy
-Python implementation of locally-approximated GP
+Python implementation of local approximate GP
