@@ -5,9 +5,15 @@ setup.py
 versioneer.py
 laGPy/__init__.py
 laGPy/_version.py
+laGPy/covar.py
+laGPy/gp.py
 laGPy/laGPy.py
+laGPy/laGPy_og.py
+laGPy/matrix.py
+laGPy/order.py
 laGPy/versioneer.py
 laGPy.egg-info/PKG-INFO
 laGPy.egg-info/SOURCES.txt
 laGPy.egg-info/dependency_links.txt
+laGPy.egg-info/requires.txt
 laGPy.egg-info/top_level.txt

@@ -12,6 +12,10 @@ setup(
     long_description_content_type='text/markdown',
     url='https://github.com/rqmacasieb/laGPy',
     packages=find_packages(),
+    install_requires=[
+        "numpy>=1.19.0",
+        "scipy>=1.6.0",
+    ],
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
