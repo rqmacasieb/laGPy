@@ -1,5 +1,5 @@
 import numpy as np
-import laGPy
+from laGPy import LaGP
 
 # Generate example data
 np.random.seed(42)
@@ -8,7 +8,7 @@ y = np.sin(X[:, 0]) + np.cos(X[:, 1])
 X_test = np.random.rand(10, 2)
 
 # Create and fit LaGP model
-model = laGPy(kernel="gaussian")
+model = LaGP(kernel="gaussian")
 mean, var = model.fit_predict(
     X, y, X_test,
     start=6,
