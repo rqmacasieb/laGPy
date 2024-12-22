@@ -1,0 +1,13 @@
+LICENSE
+README.md
+setup.cfg
+setup.py
+versioneer.py
+laGPy/__init__.py
+laGPy/_version.py
+laGPy/laGPy.py
+laGPy/versioneer.py
+laGPy.egg-info/PKG-INFO
+laGPy.egg-info/SOURCES.txt
+laGPy.egg-info/dependency_links.txt
+laGPy.egg-info/top_level.txt
