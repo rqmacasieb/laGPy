@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List, Dict, NamedTuple
-from .gp import GP, new_gp, pred_gp, update_gp, update_covariance
+from .gp import GP, new_gp, pred_gp, update_gp
 from .matrix import get_data_rect
 from .order import order
 

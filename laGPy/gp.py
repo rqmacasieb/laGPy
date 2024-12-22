@@ -29,6 +29,32 @@ class GP:
     def n(self) -> int:
         """Number of rows in X"""
         return self.X.shape[0]
+    
+    def update_covariance(self) -> None:
+        """
+        Update covariance matrix K and its inverse Ki based on current parameters
+        Also updates ldetK (log determinant) and KiZ
+        """
+        # Calculate covariance matrix
+        self.K = covar_symm(self.X, self.d, self.g)
+        
+        try:
+            # Calculate Cholesky decomposition
+            L = np.linalg.cholesky(self.K)
+            
+            # Update inverse
+            self.Ki = np.linalg.inv(self.K)
+            
+            # Update log determinant
+            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
+            
+            # Update KiZ if Z exists
+            if self.Z is not None:
+                self.KiZ = self.Ki @ self.Z
+                self.phi = self.Z @ self.KiZ
+                
+        except np.linalg.LinAlgError:
+            raise ValueError("Covariance matrix is singular or not positive definite")
 
 def new_gp(X: np.ndarray, Z: np.ndarray, d: float, g: float, 
            compute_derivs: bool = False) -> GP:
@@ -92,57 +118,37 @@ def pred_gp(gp: GP, XX: np.ndarray, include_nugget: bool = True) -> Tuple[np.nda
         
     return mean, var
 
-def update_gp(self, X_new: np.ndarray, Z_new: np.ndarray) -> None:
-        """
-        Update GP with new observations
+def update_gp(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
+    """
+    Update GP with new observations
+    
+    Args:
+        gp: GP instance to update
+        X_new: New input points
+        Z_new: New observations
         
-        Args:
-            X_new: New input points
-            Z_new: New observations
-        """
-        # Concatenate new data with existing data
-        self.X = np.vstack([self.X, X_new])
-        self.Z = np.concatenate([self.Z, Z_new])
-        
-        # Recalculate covariance matrix
-        self.K = covar_symm(self.X, self.d, self.g)
-        
-        # Update inverse and log determinant
-        try:
-            L = np.linalg.cholesky(self.K)
-            self.Ki = np.linalg.inv(self.K)
-            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
-        except np.linalg.LinAlgError:
-            raise ValueError("Covariance matrix became singular during update")
-        
-        # Update KiZ
-        self.KiZ = self.Ki @ self.Z
-        
-        # Update phi
-        self.phi = self.Z @ self.KiZ
-
-def update_covariance(self) -> None:
-        """
-        Update covariance matrix K and its inverse Ki based on current parameters
-        Also updates ldetK (log determinant) and KiZ
-        """
-        # Calculate covariance matrix
-        self.K = covar_symm(self.X, self.d, self.g)
-        
-        try:
-            # Calculate Cholesky decomposition
-            L = np.linalg.cholesky(self.K)
-            
-            # Update inverse
-            self.Ki = np.linalg.inv(self.K)
-            
-            # Update log determinant
-            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
-            
-            # Update KiZ if Z exists
-            if self.Z is not None:
-                self.KiZ = self.Ki @ self.Z
-                self.phi = self.Z @ self.KiZ
-                
-        except np.linalg.LinAlgError:
-            raise ValueError("Covariance matrix is singular or not positive definite")
+    Returns:
+        Updated GP instance
+    """
+    # Concatenate new data with existing data
+    gp.X = np.vstack([gp.X, X_new])
+    gp.Z = np.concatenate([gp.Z, Z_new])
+    
+    # Recalculate covariance matrix
+    gp.K = covar_symm(gp.X, gp.d, gp.g)
+    
+    # Update inverse and log determinant
+    try:
+        L = np.linalg.cholesky(gp.K)
+        gp.Ki = np.linalg.inv(gp.K)
+        gp.ldetK = 2 * np.sum(np.log(np.diag(L)))
+    except np.linalg.LinAlgError:
+        raise ValueError("Covariance matrix became singular during update")
+    
+    # Update KiZ
+    gp.KiZ = gp.Ki @ gp.Z
+    
+    # Update phi
+    gp.phi = gp.Z @ gp.KiZ
+    
+    return gp

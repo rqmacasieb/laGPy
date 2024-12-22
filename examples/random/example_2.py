@@ -9,7 +9,7 @@ Xref = np.random.rand(5, 2)
 # Run with automatic parameter estimation
 mean, var, indices, d, g = laGP(
     m=2,                     # 2D input
-    start=10,               # Initial points
+    start=6,               # Initial points
     end=20,                # Total points to select
     Xref=Xref,             # Reference points
     n=X.shape[0],          # Total available points

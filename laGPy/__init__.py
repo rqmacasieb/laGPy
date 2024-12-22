@@ -2,7 +2,7 @@
 
 # lagpy/__init__.py
 from .laGPy import laGP, Method, MLEResult
-from .gp import GP, new_gp, pred_gp
+from .gp import GP, new_gp, pred_gp, update_gp
 from .covar import covar, covar_symm, distance
 from .matrix import get_data_rect
 from .order import order, rank, rand_indices
@@ -17,6 +17,7 @@ __all__ = [
     'GP',
     'new_gp',
     'pred_gp',
+    'update_gp',
     'covar',
     'covar_symm',
     'distance',
