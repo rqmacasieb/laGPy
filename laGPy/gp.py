@@ -91,3 +91,32 @@ def pred_gp(gp: GP, XX: np.ndarray, include_nugget: bool = True) -> Tuple[np.nda
         var = np.ones(XX.shape[0]) - np.sum(k @ gp.Ki * k, axis=1)
         
     return mean, var
+
+def update_gp(self, X_new: np.ndarray, Z_new: np.ndarray) -> None:
+        """
+        Update GP with new observations
+        
+        Args:
+            X_new: New input points
+            Z_new: New observations
+        """
+        # Concatenate new data with existing data
+        self.X = np.vstack([self.X, X_new])
+        self.Z = np.concatenate([self.Z, Z_new])
+        
+        # Recalculate covariance matrix
+        self.K = covar_symm(self.X, self.d, self.g)
+        
+        # Update inverse and log determinant
+        try:
+            L = np.linalg.cholesky(self.K)
+            self.Ki = np.linalg.inv(self.K)
+            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
+        except np.linalg.LinAlgError:
+            raise ValueError("Covariance matrix became singular during update")
+        
+        # Update KiZ
+        self.KiZ = self.Ki @ self.Z
+        
+        # Update phi
+        self.phi = self.Z @ self.KiZ

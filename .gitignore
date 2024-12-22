@@ -1,6 +1,10 @@
 # Ignore Python cache files
+*.pyc
 __pycache__/
-*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # Ignore validation run files
 validation/

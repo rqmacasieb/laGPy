@@ -4,6 +4,17 @@ from scipy.optimize import minimize
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List, Dict, NamedTuple
+from .gp import GP, new_gp, pred_gp
+from .matrix import get_data_rect
+from .order import order
+
+class Method(Enum):
+    ALC = 1
+    ALCOPT = 2 
+    ALCRAY = 3
+    MSPE = 4
+    EFI = 5
+    NN = 6
 
 class MLEResult(NamedTuple):
     """Results from MLE optimization"""
@@ -101,6 +112,47 @@ def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]
     g = (0.01 * z_std)**2  # Start with 1% of variance
     
     return d, g
+
+def closest_indices(m: int, start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
+                   close: int, sorted: bool = False) -> np.ndarray:
+    """
+    Returns the close indices into X which are closest to Xref.
+    
+    Args:
+        m: Number of input dimensions
+        start: Number of initial points
+        Xref: Reference points
+        n: Number of total points
+        X: Input points
+        close: Number of close points to find
+        sorted: Whether to sort the indices
+        
+    Returns:
+        Array of indices of closest points
+    """
+    # Calculate distances to reference location(s)
+    D = np.zeros((Xref.shape[0], n))
+    for i in range(m):
+        D += (Xref[:, i:i+1] - X[:, i].reshape(1, -1))**2
+        
+    # Take minimum distance if multiple reference points
+    if Xref.shape[0] > 1:
+        D = D.min(axis=0)
+        
+    # Get indices of closest points
+    if n > close:
+        idx = np.argsort(D)[:close]
+    else:
+        idx = np.arange(n)
+        
+    # Sort by distance if requested
+    if sorted:
+        idx = idx[np.argsort(D[idx])]
+    elif start < close:
+        # Partially sort to get start closest
+        idx[:start] = idx[np.argpartition(D[idx], start)[:start]]
+        
+    return idx
 
 def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray, 
          Z: np.ndarray, d: Optional[float] = None, g: Optional[float] = None, 
@@ -204,7 +256,7 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
         selected[i] = cand_idx[w]
         
         # Update GP
-        gp = update_gp(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
+        gp = update(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
         
         # Re-estimate parameters periodically if requested
         if param_est and (i - start + 1) % est_freq == 0:
@@ -227,3 +279,25 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
     mean, var = pred_gp(gp, Xref)
     
     return mean, var, selected, gp.d, gp.g
+
+def alc_cpu(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:
+    """CPU implementation of ALC criterion"""
+    # Implementation of ALC calculations
+    pass
+
+def mspe(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:
+    """Calculate MSPE criterion"""
+    # Implementation of MSPE calculations
+    pass
+
+def alcray_selection(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, 
+                    roundrobin: int, numstart: int, rect: np.ndarray,
+                    verb: int = 0) -> int:
+    """ALCRAY point selection"""
+    # Implementation of ALCRAY selection
+    pass
+
+def update_gp(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
+    """Update GP with new observations"""
+    # Implementation of GP update
+    pass

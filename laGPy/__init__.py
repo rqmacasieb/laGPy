@@ -1,7 +1,7 @@
 """laGPy: Python implementation of local approximate GP"""
 
 # lagpy/__init__.py
-from .lagp import laGP, Method, MLEResult
+from .laGPy import laGP, Method, MLEResult
 from .gp import GP, new_gp, pred_gp
 from .covar import covar, covar_symm, distance
 from .matrix import get_data_rect
