@@ -1,161 +1,229 @@
+# lagp.py
 import numpy as np
-from scipy.spatial.distance import cdist
-from scipy.linalg import solve, cholesky
-from typing import Tuple, Optional, List
+from scipy.optimize import minimize
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional, Tuple, List, Dict, NamedTuple
 
-class LaGP:
-    def __init__(self, kernel="gaussian"):
-        """
-        Initialize Local Approximate Gaussian Process
-        
-        Args:
-            kernel (str): Kernel function to use ("gaussian" or "matern")
-        """
-        self.kernel = kernel
-        
-    def _kernel_fn(self, X1: np.ndarray, X2: np.ndarray, 
-                   length_scale: float, nugget: float = 0.0) -> np.ndarray:
-        """
-        Compute kernel matrix between X1 and X2
-        
-        Args:
-            X1: First set of points (n1 x d)
-            X2: Second set of points (n2 x d)
-            length_scale: Length scale parameter
-            nugget: Nugget parameter for numerical stability
-            
-        Returns:
-            Kernel matrix (n1 x n2)
-        """
-        dist = cdist(X1, X2)
-        if self.kernel == "gaussian":
-            K = np.exp(-0.5 * (dist / length_scale) ** 2)
-        else:  # matern
-            K = (1 + np.sqrt(3) * dist / length_scale) * \
-                np.exp(-np.sqrt(3) * dist / length_scale)
-        
-        # Add nugget to diagonal if X1 and X2 are the same
-        if X1 is X2:
-            K += nugget * np.eye(X1.shape[0])
-        return K
+class MLEResult(NamedTuple):
+    """Results from MLE optimization"""
+    lengthscale: float  # Optimized lengthscale
+    nugget: float      # Optimized nugget
+    iterations: int    # Number of iterations
+    success: bool      # Whether optimization succeeded
+    llik: float       # Log likelihood at optimum
+
+def joint_mle_gp(gp: GP, 
+                d_range: Tuple[float, float] = (1e-6, 1.0),
+                g_range: Tuple[float, float] = (1e-6, 1.0),
+                verb: int = 0) -> MLEResult:
+    """
+    Joint maximum likelihood estimation for GP lengthscale and nugget
     
-    def _find_closest_points(self, X: np.ndarray, Xref: np.ndarray, 
-                           n_close: int) -> np.ndarray:
-        """
-        Find indices of closest points to reference points
+    Args:
+        gp: GP instance
+        d_range: (min, max) range for lengthscale
+        g_range: (min, max) range for nugget
+        verb: Verbosity level
         
-        Args:
-            X: Training points
-            Xref: Reference points
-            n_close: Number of closest points to find
+    Returns:
+        MLEResult containing optimized values and optimization info
+    """
+    def neg_log_likelihood(theta):
+        """Negative log likelihood function for joint optimization"""
+        d, g = theta
+        
+        # Update GP parameters
+        gp.d = d
+        gp.g = g
+        gp.update_covariance()
+        
+        try:
+            # Log determinant term
+            sign, logdet = np.linalg.slogdet(gp.K)
+            if sign <= 0:
+                return np.inf
+                
+            # Quadratic term
+            alpha = np.linalg.solve(gp.K, gp.Z)
+            quad = np.dot(gp.Z, alpha)
             
-        Returns:
-            Indices of closest points
-        """
-        distances = cdist(Xref, X)
-        return np.argsort(distances[0])[:n_close]
+            # Full negative log likelihood
+            nll = 0.5 * (logdet + quad + len(gp.Z) * np.log(2 * np.pi))
+            return nll
+        except np.linalg.LinAlgError:
+            return np.inf
+
+    # Initial parameter values - use geometric mean of bounds
+    d0 = np.sqrt(d_range[0] * d_range[1])
+    g0 = np.sqrt(g_range[0] * g_range[1])
     
-    def _compute_alc_score(self, X_cand: np.ndarray, X_ref: np.ndarray, 
-                          K: np.ndarray, K_inv: np.ndarray) -> np.ndarray:
-        """
-        Compute Active Learning Cohn (ALC) score for candidate points
-        
-        Args:
-            X_cand: Candidate points
-            X_ref: Reference points
-            K: Current kernel matrix
-            K_inv: Inverse of current kernel matrix
-            
-        Returns:
-            ALC scores for each candidate point
-        """
-        scores = []
-        for x in X_cand:
-            k_star = self._kernel_fn(X_ref, x.reshape(1, -1), 
-                                   self.length_scale, self.nugget)
-            k_star_star = self._kernel_fn(x.reshape(1, -1), x.reshape(1, -1), 
-                                        self.length_scale, self.nugget)
-            
-            # Compute variance reduction
-            v1 = k_star_star - k_star.T @ K_inv @ k_star
-            scores.append(v1[0, 0])
-            
-        return np.array(scores)
+    # Optimize
+    result = minimize(
+        neg_log_likelihood,
+        x0=[d0, g0],
+        method='L-BFGS-B',
+        bounds=[d_range, g_range],
+        options={'maxiter': 100, 'disp': verb > 0}
+    )
     
-    def fit_predict(self, X: np.ndarray, y: np.ndarray, X_test: np.ndarray, 
-                   start: int = 6, end: Optional[int] = None, 
-                   length_scale: float = 1.0, nugget: float = 1e-6, 
-                   n_close: int = 40) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Fit LaGP model and make predictions
+    # Update GP with optimal parameters
+    if result.success:
+        gp.d = result.x[0]
+        gp.g = result.x[1]
+        gp.update_covariance()
+    
+    return MLEResult(
+        lengthscale=result.x[0],
+        nugget=result.x[1],
+        iterations=result.nit,
+        success=result.success,
+        llik=-result.fun
+    )
+
+def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]:
+    """
+    Estimate initial lengthscale and nugget parameters
+    
+    Args:
+        X: Input locations
+        Z: Output values
         
-        Args:
-            X: Training input data (n_samples x n_features)
-            y: Training target values (n_samples,)
-            X_test: Test input data (n_test x n_features)
-            start: Number of initial points
-            end: Final number of points (default: start + 20)
-            length_scale: Kernel length scale parameter
-            nugget: Nugget parameter for numerical stability
-            n_close: Number of close points to consider
-            
-        Returns:
-            Tuple of (predictions mean, predictions variance)
-        """
-        self.length_scale = length_scale
-        self.nugget = nugget
+    Returns:
+        Tuple of (lengthscale, nugget) estimates
+    """
+    # Estimate lengthscale using median distance
+    dists = np.sqrt(((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2))
+    d = np.median(dists[dists > 0])
+    
+    # Estimate nugget using output variance
+    z_std = np.std(Z)
+    g = (0.01 * z_std)**2  # Start with 1% of variance
+    
+    return d, g
+
+def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray, 
+         Z: np.ndarray, d: Optional[float] = None, g: Optional[float] = None, 
+         method: Method = Method.ALC, close: int = 0,
+         param_est: bool = True, 
+         d_range: Tuple[float, float] = (1e-6, 1.0),
+         g_range: Tuple[float, float] = (1e-6, 1.0),
+         est_freq: int = 10,  # How often to re-estimate parameters
+         alc_gpu: bool = False, numstart: int = 1, 
+         rect: Optional[np.ndarray] = None,
+         verb: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
+    """
+    Local Approximate GP prediction with parameter estimation
+    
+    Args:
+        m: Input dimension
+        start: Number of initial points
+        end: Number of total points to select
+        Xref: Reference points for prediction
+        n: Number of total points
+        X: Input points
+        Z: Output values
+        d: Initial length scale (if None, will be estimated)
+        g: Initial nugget (if None, will be estimated)
+        method: Method for selecting points
+        close: Number of close points to consider
+        param_est: Whether to estimate parameters using MLE
+        d_range: (min, max) range for lengthscale optimization
+        g_range: (min, max) range for nugget optimization
+        est_freq: How often to re-estimate parameters
+        alc_gpu: Whether to use GPU for ALC calculations
+        numstart: Number of starting points for ALCRAY
+        rect: Optional rectangle bounds
+        verb: Verbosity level
         
-        if end is None:
-            end = start + 20
-            
-        n_test = X_test.shape[0]
-        predictions = np.zeros(n_test)
-        variances = np.zeros(n_test)
+    Returns:
+        Tuple of:
+        - Mean predictions
+        - Variance predictions
+        - Selected indices
+        - Final length scale
+        - Final nugget
+    """
+    # Get closest points for initial design
+    idx = closest_indices(m, start, Xref, n, X, close, 
+                         method in (Method.ALCRAY, Method.ALCOPT))
+    
+    # Initial data
+    X_init = X[idx[:start]]
+    Z_init = Z[idx[:start]]
+    
+    # Initial parameter estimates if not provided
+    if d is None or g is None:
+        d_est, g_est = estimate_initial_params(X_init, Z_init)
+        d = d_est if d is None else d
+        g = g_est if g is None else g
         
-        # For each test point
-        for i in range(n_test):
-            # Find closest points to current test point
-            closest_idx = self._find_closest_points(X, X_test[i:i+1], n_close)
-            X_close = X[closest_idx]
-            y_close = y[closest_idx]
+        if verb > 0:
+            print(f"Initial estimates: lengthscale={d:.6f}, nugget={g:.6f}")
+    
+    # Build initial GP
+    gp = new_gp(X_init, Z_init, d, g)
+    
+    # Initial parameter optimization if requested
+    if param_est:
+        mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
+        if verb > 0:
+            print(f"MLE results: lengthscale={mle_result.lengthscale:.6f}, "
+                  f"nugget={mle_result.nugget:.6f} "
+                  f"(iterations: {mle_result.iterations})")
+    
+    # Setup candidate points
+    cand_idx = idx[start:]
+    Xcand = X[cand_idx]
+    ncand = len(cand_idx)
+    
+    # Get rect bounds if needed
+    if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
+        rect = get_data_rect(Xcand)
+        
+    # Storage for selected indices
+    selected = np.zeros(end, dtype=int)
+    selected[:start] = idx[:start]
+    
+    # Iteratively select points
+    for i in range(start, end):
+        # Point selection logic based on method
+        if method == Method.ALCRAY:
+            roundrobin = (i - start + 1) % int(np.sqrt(i - start + 1))
+            w = alcray_selection(gp, Xcand, Xref, roundrobin, numstart, rect, verb)
+        elif method == Method.ALC:
+            scores = alc_gpu(gp, Xcand, Xref, verb) if alc_gpu else alc_cpu(gp, Xcand, Xref, verb)
+            w = np.argmax(scores)
+        elif method == Method.MSPE:
+            scores = mspe(gp, Xcand, Xref, verb)
+            w = np.argmin(scores)
+        else:  # Method.NN
+            w = i - start
             
-            # Initialize with starting points
-            active_idx = list(range(start))
-            remaining_idx = list(range(start, n_close))
-            
-            X_active = X_close[active_idx]
-            y_active = y_close[active_idx]
-            
-            # Sequentially add points
-            while len(active_idx) < end and remaining_idx:
-                # Compute current kernel matrix and its inverse
-                K = self._kernel_fn(X_active, X_active, 
-                                  self.length_scale, self.nugget)
-                K_inv = solve(K, np.eye(K.shape[0]))
-                
-                # Compute ALC scores for remaining points
-                X_cand = X_close[remaining_idx]
-                scores = self._compute_alc_score(X_cand, X_active, K, K_inv)
-                
-                # Select best point
-                best_idx = np.argmax(scores)
-                new_idx = remaining_idx.pop(best_idx)
-                active_idx.append(new_idx)
-                
-                # Update active set
-                X_active = X_close[active_idx]
-                y_active = y_close[active_idx]
-            
-            # Make prediction
-            K = self._kernel_fn(X_active, X_active, 
-                              self.length_scale, self.nugget)
-            k_star = self._kernel_fn(X_active, X_test[i:i+1], 
-                                   self.length_scale)
-            
-            # Compute predictive mean and variance
-            K_inv = solve(K, np.eye(K.shape[0]))
-            predictions[i] = k_star.T @ K_inv @ y_active
-            variances[i] = (1.0 + self.nugget - 
-                          k_star.T @ K_inv @ k_star)[0, 0]
-            
-        return predictions, variances
+        # Record chosen point
+        selected[i] = cand_idx[w]
+        
+        # Update GP
+        gp = update_gp(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
+        
+        # Re-estimate parameters periodically if requested
+        if param_est and (i - start + 1) % est_freq == 0:
+            mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
+            if verb > 0:
+                print(f"Update {i}: lengthscale={mle_result.lengthscale:.6f}, "
+                      f"nugget={mle_result.nugget:.6f}")
+        
+        # Update candidate set
+        if w < ncand - 1:
+            if method in (Method.ALCRAY, Method.ALCOPT):
+                cand_idx = np.delete(cand_idx, w)
+                Xcand = np.delete(Xcand, w, axis=0)
+            else:
+                cand_idx[w] = cand_idx[-1]
+                Xcand[w] = Xcand[-1]
+        ncand -= 1
+    
+    # Final predictions
+    mean, var = pred_gp(gp, Xref)
+    
+    return mean, var, selected, gp.d, gp.g
