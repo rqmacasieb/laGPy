@@ -120,3 +120,29 @@ def update_gp(self, X_new: np.ndarray, Z_new: np.ndarray) -> None:
         
         # Update phi
         self.phi = self.Z @ self.KiZ
+
+def update_covariance(self) -> None:
+        """
+        Update covariance matrix K and its inverse Ki based on current parameters
+        Also updates ldetK (log determinant) and KiZ
+        """
+        # Calculate covariance matrix
+        self.K = covar_symm(self.X, self.d, self.g)
+        
+        try:
+            # Calculate Cholesky decomposition
+            L = np.linalg.cholesky(self.K)
+            
+            # Update inverse
+            self.Ki = np.linalg.inv(self.K)
+            
+            # Update log determinant
+            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
+            
+            # Update KiZ if Z exists
+            if self.Z is not None:
+                self.KiZ = self.Ki @ self.Z
+                self.phi = self.Z @ self.KiZ
+                
+        except np.linalg.LinAlgError:
+            raise ValueError("Covariance matrix is singular or not positive definite")

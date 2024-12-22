@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List, Dict, NamedTuple
-from .gp import GP, new_gp, pred_gp
+from .gp import GP, new_gp, pred_gp, update_gp, update_covariance
 from .matrix import get_data_rect
 from .order import order
 
@@ -256,7 +256,7 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
         selected[i] = cand_idx[w]
         
         # Update GP
-        gp = update(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
+        gp = update_gp(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
         
         # Re-estimate parameters periodically if requested
         if param_est and (i - start + 1) % est_freq == 0:
@@ -297,7 +297,3 @@ def alcray_selection(gp: GP, Xcand: np.ndarray, Xref: np.ndarray,
     # Implementation of ALCRAY selection
     pass
 
-def update_gp(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
-    """Update GP with new observations"""
-    # Implementation of GP update
-    pass

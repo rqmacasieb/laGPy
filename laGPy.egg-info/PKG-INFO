@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: laGPy
-Version: 0+untagged.8.g6fad3fd.dirty
+Version: 0+untagged.9.g88bbc96
 Summary: Python implementation of local approximate GP
 Home-page: https://github.com/rqmacasieb/laGPy
 Author: Reygie Macasieb
