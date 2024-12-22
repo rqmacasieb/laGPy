@@ -4,7 +4,7 @@ from laGPy import laGP, Method
 # Generate example data
 X = np.random.rand(100, 2)
 Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100)
-Xref = np.random.rand(5, 2)
+Xref = np.random.rand(2, 2)
 
 # Run with automatic parameter estimation
 mean, var, indices, d, g = laGP(

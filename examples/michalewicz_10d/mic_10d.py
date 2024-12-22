@@ -3,11 +3,11 @@ import pandas as pd
 import sys
 
 #import laGPy from the current release version
-# from laGPy import LaGP
+from laGPy import laGP, Method
 
 #import laGPy from the local development directory
-sys.path.append('../..')
-from laGPy.laGPy import LaGP
+# sys.path.append('../..')
+# from laGPy.laGPy import LaGP
 
 # import training dataset
 X = pd.read_csv('mic.dv_pop.csv', header = 0).drop(columns=['real_name']).values #n_tr x n_dv
@@ -18,14 +18,22 @@ y = y['func'].values
 X_dv = pd.read_csv('dv.dat', header = 0).values.transpose() #1 x n_dv
 
 # Create and fit LaGP model
-model = LaGP(kernel="gaussian")
-mean, var = model.fit_predict(
-    X, y, X_dv,
-    start=6,
-    end=20,
-    length_scale=0.1,
-    nugget=1e-4,
-    n_close=40
+mean, var, indices, d, g = laGP(
+    m=2,                     # 2D input
+    start=6,               # Initial points
+    end=20,                # Total points to select
+    Xref=X_dv,             # Reference points
+    n=X.shape[0],          # Total available points
+    X=X,                   # Input points
+    Z=y,                   # Output values
+    d=None,                # Let the algorithm estimate lengthscale
+    g=1e-04,                # Let the algorithm estimate nugget
+    method=Method.ALC,     # Use ALC selection
+    close=30,              # Consider 30 closest points
+    param_est=True,        # Enable parameter estimation
+    d_range=(1e-4, 1e+4),  # Bounds for lengthscale
+    est_freq=6,          # Re-estimate every 10 points
+    verb=0                # Show optimization progress
 )
 
 print("Prediction mean:", mean)

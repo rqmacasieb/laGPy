@@ -130,15 +130,17 @@ def closest_indices(m: int, start: int, Xref: np.ndarray, n: int, X: np.ndarray,
     Returns:
         Array of indices of closest points
     """
+
+    # Ensure Xref is 2D
+    if len(Xref.shape) == 1:
+        Xref = Xref.reshape(1, -1)
+
     # Calculate distances to reference location(s)
-    D = np.zeros((Xref.shape[0], n))
+    D = np.zeros(n)
     for i in range(m):
-        D += (Xref[:, i:i+1] - X[:, i].reshape(1, -1))**2
-        
-    # Take minimum distance if multiple reference points
-    if Xref.shape[0] > 1:
-        D = D.min(axis=0)
-        
+        diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
+        D += np.min(diff**2, axis=0)  # Take minimum across reference points
+
     # Get indices of closest points
     if n > close:
         idx = np.argsort(D)[:close]
