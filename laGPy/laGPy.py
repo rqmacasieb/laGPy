@@ -1,12 +1,13 @@
-# lagp.py
 import numpy as np
 from scipy.optimize import minimize
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List, Dict, NamedTuple
-from .gp import GP, new_gp, pred_gp, update_gp
+from .gp import *
 from .matrix import get_data_rect
 from .order import order
+from .covar_sep import *
+from .covar import *
 
 class Method(Enum):
     ALC = 1
@@ -113,13 +114,12 @@ def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]
     
     return d, g
 
-def closest_indices(m: int, start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
+def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
                    close: int, sorted: bool = False) -> np.ndarray:
     """
     Returns the close indices into X which are closest to Xref.
     
     Args:
-        m: Number of input dimensions
         start: Number of initial points
         Xref: Reference points
         n: Number of total points
@@ -130,14 +130,13 @@ def closest_indices(m: int, start: int, Xref: np.ndarray, n: int, X: np.ndarray,
     Returns:
         Array of indices of closest points
     """
-
     # Ensure Xref is 2D
     if len(Xref.shape) == 1:
         Xref = Xref.reshape(1, -1)
 
     # Calculate distances to reference location(s)
     D = np.zeros(n)
-    for i in range(m):
+    for i in range(Xref.shape[1]):
         diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
         D += np.min(diff**2, axis=0)  # Take minimum across reference points
 
@@ -156,9 +155,9 @@ def closest_indices(m: int, start: int, Xref: np.ndarray, n: int, X: np.ndarray,
         
     return idx
 
-def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray, 
-         Z: np.ndarray, d: Optional[float] = None, g: Optional[float] = None, 
-         method: Method = Method.ALC, close: int = 0,
+def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray, 
+         Z: np.ndarray, d: Optional[float] = None, g: Optional[float] = 1/10000, 
+         method: Method = Method.ALC, close: Optional[int] = None,
          param_est: bool = True, 
          d_range: Tuple[float, float] = (1e-6, 1.0),
          g_range: Tuple[float, float] = (1e-6, 1.0),
@@ -170,7 +169,6 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
     Local Approximate GP prediction with parameter estimation
     
     Args:
-        m: Input dimension
         start: Number of initial points
         end: Number of total points to select
         Xref: Reference points for prediction
@@ -198,8 +196,16 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
         - Final length scale
         - Final nugget
     """
+
+    if close is None:
+        close = min((1000 + end) * (10 if method in [Method.ALCRAY, Method.ALCOPT] else 1), X.shape[0])
+
+    #check input dimension
+    if Xref.shape[1] != X.shape[1]:
+        raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
+
     # Get closest points for initial design
-    idx = closest_indices(m, start, Xref, n, X, close, 
+    idx = closest_indices(start, Xref, n, X, close, 
                          method in (Method.ALCRAY, Method.ALCOPT))
     
     # Initial data
@@ -246,7 +252,7 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
             roundrobin = (i - start + 1) % int(np.sqrt(i - start + 1))
             w = alcray_selection(gp, Xcand, Xref, roundrobin, numstart, rect, verb)
         elif method == Method.ALC:
-            scores = alc_gpu(gp, Xcand, Xref, verb) if alc_gpu else alc_cpu(gp, Xcand, Xref, verb)
+            scores = alc(gp, Xcand, Xref, verb) #no gpu support for now
             w = np.argmax(scores)
         elif method == Method.MSPE:
             scores = mspe(gp, Xcand, Xref, verb)
@@ -282,11 +288,146 @@ def laGP(m: int, start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
     
     return mean, var, selected, gp.d, gp.g
 
-def alc_cpu(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:
-    """CPU implementation of ALC criterion"""
-    # Implementation of ALC calculations
-    pass
+def alc(gp, Xcand, Xref, verb=0):
+    """
+    CPU implementation of ALC criterion.
+    
+    Args:
+        gp: GP instance with attributes like m, n, Ki, d, g, phi, X
+        Xcand: Candidate points (2D numpy array)
+        Xref: Reference points (2D numpy array)
+        verb: Verbosity level
+        
+    Returns:
+        ALC scores for each candidate point
+    """
+    m = gp.m #number of dimensions
+    n = gp.n #number of data points
+    df = float(n)
+    ncand = Xcand.shape[0]
+    nref = Xref.shape[0]
+    
+    # Allocate vectors
+    gvec = np.zeros(n)
+    kxy = np.zeros(nref)
+    kx = np.zeros(n)
+    ktKikx = np.zeros(nref)
+    
+    # k <- covar(X1=X, X2=Xref, d=Zt$d, g=0)
+    k = covar_sep(m, Xref, Xref.shape[0], gp.X, gp.X.shape[0], gp.d)
+    
+    # Initialize ALC scores
+    alc_scores = np.zeros(ncand)
+    
+    # Calculate the ALC for each candidate
+    for i in range(ncand):
+        if verb > 0:
+            print(f"alc: calculating ALC for point {i+1} of {ncand}")
+        
+        # Calculate the g vector, mui, and kxy
+        mui, gvec, kx, kxy = calc_g_mui_kxy(m, Xcand[i], gp.X, gp.X.shape[0], gp.Ki, Xref, Xref.shape[0], gp.d, gp.g)
+        
+        # Skip if numerical problems
+        if mui <= np.finfo(float).eps:
+            alc_scores[i] = -np.inf
+            continue
+        
+        # Use g, mu, and kxy to calculate ktKik.x
+        ktKikx = calc_ktKikx(None, nref, k, gp.X.shape[0], gvec, mui, kxy, None, None)
+        
+        # Calculate the ALC
+        alc_scores[i] = calc_alc(nref, ktKikx, [0, 0], gp.phi, df)
+    
+    return alc_scores
 
+def calc_ktKikx(ktKik, m, k, n, g, mui, kxy, Gmui=None, ktGmui=None):
+    """
+    Calculate the ktKikx vector for the IECI calculation.
+    
+    Args:
+        ktKik: Initial ktKik vector (1D numpy array) or None
+        m: Number of reference points
+        k: Covariance matrix (2D numpy array)
+        n: Number of data points
+        g: g vector (1D numpy array)
+        mui: Scalar value
+        kxy: Covariance vector between candidate and reference points (1D numpy array)
+        Gmui: Optional precomputed Gmui matrix (2D numpy array)
+        ktGmui: Optional precomputed ktGmui vector (1D numpy array)
+        
+    Returns:
+        ktKikx: Calculated ktKikx vector (1D numpy array)
+    """
+    ktKikx = np.zeros(m)
+
+    if Gmui is not None:
+        Gmui = np.outer(g, g) / mui
+        assert ktGmui is not None
+
+    for i in range(m):
+
+        if k[i].ndim > 1:
+            k[i] = k[i].flatten()
+        if g[i].ndim > 1:
+            g[i] = g[i].flatten()
+
+        if k[i].shape[0] != g.shape[0]:
+            raise ValueError(f"Dimension mismatch: k[{i}].shape = {k[i].shape}, g.shape = {g.shape}")
+
+        if Gmui is not None:
+            ktGmui = np.dot(Gmui, k[i])
+            if ktKik is not None:
+                ktKikx[i] = ktKik[i] + np.dot(ktGmui, k[i])
+            else:
+                ktKikx[i] = np.dot(ktGmui, k[i])
+        else:
+            if ktKik is not None:
+                ktKikx[i] = ktKik[i] + (np.dot(k[i], g) ** 2) * mui
+            else:
+                ktKikx[i] = (np.dot(k[i], g) ** 2) * mui
+
+        # Add 2*diag(kxy %*% t(g) %*% k)
+        ktKikx[i] += 2.0 * np.dot(k[i], g) * kxy[i]
+
+        # Add kxy^2/mui
+        ktKikx[i] += (kxy[i] ** 2) / mui
+
+    return ktKikx
+
+def calc_alc(m, ktKik, s2p, phi, tdf, badj=None, w=None):
+    """
+    Calculate the Active Learning Criterion (ALC).
+    
+    Args:
+        m: Number of points
+        ktKik: Array of ktKik values (1D numpy array)
+        s2p: Array of s2p values (1D numpy array)
+        phi: Scalar value
+        badj: Optional array of adjustment factors (1D numpy array)
+        tdf: Degrees of freedom
+        w: Optional array of weights (1D numpy array)
+        
+    Returns:
+        ALC value
+    """
+    dfrat = tdf / (tdf - 2.0)
+    alc = 0.0
+    
+    for i in range(m):
+        zphi = (s2p[1] + phi) * ktKik[i]
+        if badj is not None:
+            ts2 = badj[i] * zphi / (s2p[0] + tdf)
+        else:
+            ts2 = zphi / (s2p[0] + tdf)
+        
+        if w is not None:
+            alc += w[i] * dfrat * ts2
+        else:
+            alc += ts2 * dfrat
+    
+    return alc / m
+
+#these are placeholder functions for now. Will develop these later if needed.
 def mspe(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:
     """Calculate MSPE criterion"""
     # Implementation of MSPE calculations

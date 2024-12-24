@@ -55,3 +55,38 @@ def covar_symm(X: np.ndarray, d: float, g: float) -> np.ndarray:
     K = covar(X, X, d)
     np.fill_diagonal(K, 1.0 + g)
     return K
+
+def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
+    """
+    Calculate the g vector, mui, and kxy for the IECI calculation.
+    
+    Args:
+        col: Number of columns (features)
+        x: Single input point (1D numpy array)
+        X: Input data matrix (2D numpy array)
+        n: Number of data points in X
+        Ki: Inverse of the covariance matrix of X (2D numpy array)
+        Xref: Reference data matrix (2D numpy array)
+        nref: Number of reference points
+        d: Range parameters (1D numpy array)
+        g: Nugget parameter
+        
+    Returns:
+        Tuple of (mui, gvec, kx, kxy)
+    """
+    # Calculate kx: covariance between x and each point in X
+    kx = np.exp(-0.5 * np.sum(((X - x) / d) ** 2, axis=1))
+    
+    # Calculate kxy: covariance between x and each point in Xref
+    kxy = np.exp(-0.5 * np.sum(((Xref - x) / d) ** 2, axis=1))
+    
+    # Calculate gvec: Ki * kx
+    gvec = Ki @ kx
+    
+    # Calculate mui: 1 + g - kx' * gvec
+    mui = 1.0 + g - np.dot(kx, gvec)
+    
+    # Calculate gvec: - Kikx/mui
+    gvec *= -1.0 / mui
+
+    return mui, gvec, kx, kxy
