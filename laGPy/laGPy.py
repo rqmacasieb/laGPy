@@ -151,12 +151,12 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
         idx = idx[np.argsort(D[idx])]
     elif start < close:
         # Partially sort to get start closest
-        idx[:start] = idx[np.argpartition(D[idx], start)[:start]]
+        idx = np.argpartition(D[idx], start)
         
     return idx
 
-def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray, 
-         Z: np.ndarray, d: Optional[float] = None, g: Optional[float] = 1/10000, 
+def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray, 
+         Z: np.ndarray, n: Optional[int] = None, d: Optional[float] = None, g: Optional[float] = 1/10000, 
          method: Method = Method.ALC, close: Optional[int] = None,
          param_est: bool = True, 
          d_range: Tuple[float, float] = (1e-6, 1.0),
@@ -172,7 +172,7 @@ def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
         start: Number of initial points
         end: Number of total points to select
         Xref: Reference points for prediction
-        n: Number of total points
+        n: Number of total input points
         X: Input points
         Z: Output values
         d: Initial length scale (if None, will be estimated)
@@ -196,6 +196,8 @@ def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
         - Final length scale
         - Final nugget
     """
+    if n is None:
+        n = X.shape[0]
 
     if close is None:
         close = min((1000 + end) * (10 if method in [Method.ALCRAY, Method.ALCOPT] else 1), X.shape[0])
@@ -235,7 +237,6 @@ def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
     # Setup candidate points
     cand_idx = idx[start:]
     Xcand = X[cand_idx]
-    ncand = len(cand_idx)
     
     # Get rect bounds if needed
     if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
@@ -274,14 +275,19 @@ def laGP(start: int, end: int, Xref: np.ndarray, n: int, X: np.ndarray,
                       f"nugget={mle_result.nugget:.6f}")
         
         # Update candidate set
-        if w < ncand - 1:
-            if method in (Method.ALCRAY, Method.ALCOPT):
-                cand_idx = np.delete(cand_idx, w)
-                Xcand = np.delete(Xcand, w, axis=0)
+        if w != len(cand_idx) - 1:
+            if method in ['alcray', 'alcopt']:
+                if w == 0:
+                    cand_idx = cand_idx[1:]
+                    Xcand = Xcand[1:]
+                else:
+                    cand_idx[w:] = cand_idx[w + 1:]
+                    Xcand[w:] = Xcand[w + 1:]
             else:
                 cand_idx[w] = cand_idx[-1]
                 Xcand[w] = Xcand[-1]
-        ncand -= 1
+            cand_idx = cand_idx[:-1]
+            Xcand = Xcand[:-1]
     
     # Final predictions
     mean, var = pred_gp(gp, Xref)
