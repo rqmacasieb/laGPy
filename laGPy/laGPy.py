@@ -6,7 +6,7 @@ from typing import Optional, Tuple, List, Dict, NamedTuple
 from .gp import *
 from .matrix import get_data_rect
 from .order import order
-from .covar_sep import *
+# from .covar_sep import *
 from .covar import *
 from .params import *
 import time
@@ -176,21 +176,15 @@ def _laGP(Xref: np.ndarray,
     Local Approximate GP prediction with parameter estimation
     
     Args:
+        Xref: Reference points for prediction
         start: Number of initial points
         end: Number of total points to select
-        Xref: Reference points for prediction
-        n: Number of total input points
         X: Input points
         Z: Output values
         d: Initial length scale (if None, will be estimated)
         g: Initial nugget (if None, will be estimated)
         method: Method for selecting points
         close: Number of close points to consider
-        param_est: Whether to estimate parameters using MLE
-        d_range: (min, max) range for lengthscale optimization
-        g_range: (min, max) range for nugget optimization
-        est_freq: How often to re-estimate parameters
-        alc_gpu: Whether to use GPU for ALC calculations
         numstart: Number of starting points for ALCRAY
         rect: Optional rectangle bounds
         lite: Whether to use lite version (only diagonal of covariance)
@@ -274,6 +268,7 @@ def _laGP(Xref: np.ndarray,
 
     # If required, obtain parameter posterior by MLE and update gp before prediction
     optimize_parameters(gp, d, g, verb)
+    
     # Given the updated gp, predict values and return results
     if lite:
         mean_pred, s2_pred, df, llik = gp.predict_lite(Xref)
@@ -298,7 +293,6 @@ def laGP(Xref: np.ndarray,
          d: Optional[Union[float, Tuple[float, float]]] = None,
          g: float = 1/10000,
          method: str = "alc",
-         Xi_ret: bool = True,
          close: Optional[int] = None,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
@@ -317,9 +311,7 @@ def laGP(Xref: np.ndarray,
         d: Lengthscale parameter or tuple of (start, mle)
         g: Nugget parameter
         method: One of "alc", "alcopt", "alcray", "mspe", "nn", "fish"
-        Xi_ret: Whether to return selected indices
         close: Number of close points to consider
-        alc_gpu: Whether to use GPU for ALC calculations
         numstart: Number of starting points for ray-based methods
         rect: Rectangle bounds for ray-based methods
         lite: Whether to use lite version (only diagonal of covariance)
@@ -392,7 +384,6 @@ def laGP(Xref: np.ndarray,
     mean = np.zeros(nref)
     s2dim = nref if lite else nref * nref
     s2 = np.zeros(s2dim)
-    Xi = np.zeros(end, dtype=int) if Xi_ret else None
     
     # Start timing
     tic = time.time()
@@ -424,14 +415,8 @@ def laGP(Xref: np.ndarray,
     }
     
     # Add s2/Sigma
-    if lite:
-        result['s2'] = s2
-    else:
-        result['Sigma'] = s2.reshape(nref, nref)
-    
-    # Add Xi if requested
-    if Xi_ret:
-        result['Xi'] = Xi
+    if not lite:
+        result['Sigma'] = results['s2'].reshape(nref, nref)
     
     # Add ray info if needed
     if method in ["alcray", "alcopt"]:
@@ -465,7 +450,7 @@ def alc(gp, Xcand, Xref, verb=0):
     ktKikx = np.zeros(nref)
     
     # k <- covar(X1=X, X2=Xref, d=Zt$d, g=0)
-    k = covar_sep(m, Xref, Xref.shape[0], gp.X, gp.X.shape[0], gp.d)
+    k = covar(Xref, gp.X, gp.d)
     
     # Initialize ALC scores
     alc_scores = np.zeros(ncand)

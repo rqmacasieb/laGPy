@@ -1,29 +1,8 @@
 import numpy as np
 from typing import Optional, Tuple
 from .utils.distance import distance
-# def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
-#     """
-#     Calculate pairwise distances between points
-    
-#     Args:
-#         X1: First set of points
-#         X2: Optional second set of points (if None, use X1)
-        
-#     Returns:
-#         Matrix of pairwise distances
-#     """
-#     if X2 is None:
-#         X2 = X1
-        
-#     n1, m = X1.shape
-#     n2 = X2.shape[0]
-    
-#     D = np.zeros((n1, n2))
-#     for i in range(m):
-#         D += (X1[:, i:i+1] - X2[:, i].reshape(1, -1))**2
-#     return D
 
-def covar(X1: np.ndarray, X2: np.ndarray, d: float, g: float = 0.0) -> np.ndarray:
+def covar(X1: np.ndarray, X2: np.ndarray, d: float) -> np.ndarray:
     """
     Calculate covariance between two sets of points
     
@@ -31,13 +10,12 @@ def covar(X1: np.ndarray, X2: np.ndarray, d: float, g: float = 0.0) -> np.ndarra
         X1: First set of points
         X2: Second set of points
         d: Length scale parameter
-        g: Nugget parameter
         
     Returns:
         Covariance matrix
     """
     D = distance(X1, X2)
-    K = np.exp(-D / (2 * d * d))
+    K = np.exp(-D / d)
     return K
 
 def covar_symm(X: np.ndarray, d: float, g: float) -> np.ndarray:
@@ -75,11 +53,13 @@ def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
         Tuple of (mui, gvec, kx, kxy)
     """
     # Calculate kx: covariance between x and each point in X
-    kx = np.exp(-0.5 * np.sum(((X - x) / d) ** 2, axis=1))
+    kx = covar(X, x.reshape(1, -1), d).flatten()
     
     # Calculate kxy: covariance between x and each point in Xref
-    kxy = np.exp(-0.5 * np.sum(((Xref - x) / d) ** 2, axis=1))
-    
+    kxy = None
+    if nref > 0:
+        kxy = covar(x.reshape(1, -1), Xref, d).flatten()
+
     # Calculate gvec: Ki * kx
     gvec = Ki @ kx
     
@@ -93,32 +73,34 @@ def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
 
 def diff_covar_symm(X: np.ndarray, d: float) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Calculate first and second derivatives of the symmetric covariance matrix.
+    Calculate the first and second derivatives of a symmetric covariance matrix.
     
     Args:
-        X: Input matrix (n x m)
-        d: Length scale parameter
+        X: Data matrix (2D array).
+        d: Lengthscale parameter.
         
     Returns:
-        Tuple of (dK, d2K) - first and second derivatives
+        dK: First derivative of the covariance matrix (2D array).
+        d2K: Second derivative of the covariance matrix (2D array).
     """
+    d2 = d**2
     n = X.shape[0]
     dK = np.zeros((n, n))
     d2K = np.zeros((n, n))
     
-    # Calculate pairwise distances
+    # Calculate pairwise distances using the imported distance function
+    D = distance(X, X)
+    
+
+    # Calculate the covariance derivatives
     for i in range(n):
-        for j in range(i+1):
-            dist = np.sum((X[i] - X[j])**2)
-            exp_term = np.exp(-0.5 * dist / d**2)
-            
-            # First derivative
-            dK[i,j] = exp_term * dist / d**3
-            dK[j,i] = dK[i,j]  # symmetric
-            
-            # Second derivative
-            d2K[i,j] = exp_term * dist * (dist - 3*d**2) / d**6
-            d2K[j,i] = d2K[i,j]  # symmetric
+        for j in range(i + 1, n):
+            dist = D[i, j]
+            dK[i, j] = dK[j, i] = dist * np.exp(-dist / d) / d2
+            d2K[i, j] = d2K[j, i] = dK[i, j] * (dist - 2.0 * d) / d2
+
+        dK[i, i] = 0.0
+        d2K[i, i] = 0.0
             
     return dK, d2K
 
