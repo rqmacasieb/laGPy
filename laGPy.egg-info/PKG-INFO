@@ -1,0 +1,21 @@
+Metadata-Version: 2.1
+Name: laGPy
+Version: 0+untagged.10.g4cf2e55.dirty
+Summary: Python implementation of local approximate GP
+Home-page: https://github.com/rqmacasieb/laGPy
+Author: Reygie Macasieb
+Author-email: reygie.macasieb@research.uwa.edu.au
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+# laGPy
+Python implementation of local approximate GP (laGP) based on the methods of Gramacy (2016)
+laGP approximates GP regression by finding local designs to predict GP outputs at some untried inputs.
+
+A complete documentation about laGP and an associated R package can be found in https://bobby.gramacy.com/r_packages/laGP/
+
+
