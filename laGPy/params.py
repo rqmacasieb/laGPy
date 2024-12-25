@@ -2,6 +2,7 @@ from typing import Optional, Union, Dict, List
 import numpy as np
 from scipy.special import gamma
 from .utils.distance import distance
+from .gp import *
 
 def check_arg(d: Dict) -> None:
     """
@@ -249,3 +250,42 @@ def get_value(param, key_or_index):
         return param[key_or_index]
     else:
         raise ValueError("Parameter must be a dictionary or a list/tuple.")
+    
+def optimize_parameters(gp, d, g, verb):
+"""
+Optimize the GP parameters using JMLE or MLE based on the provided settings.
+
+Args:
+    gp: The Gaussian Process instance.
+    d: Lengthscale parameter specification (dict or list).
+    g: Nugget parameter specification (dict or list).
+    verb: Verbosity level.
+"""
+if get_value(d, 'mle') and get_value(g, 'mle'):
+    if gp.dK is None:
+        gp.new_dK()
+    gp.jmle(
+        drange=(get_value(d, 'min'), get_value(d, 'max')),
+        grange=(get_value(g, 'min'), get_value(g, 'max')),
+        dab=get_value(d, 'ab'),
+        gab=get_value(g, 'ab'),
+        verb=verb
+    )
+elif get_value(d, 'mle'):
+    if gp.dK is None:
+        gp.new_dK()
+    gp.mle(
+        'lengthscale',
+        get_value(d, 'min'),
+        get_value(d, 'max'),
+        get_value(d, 'ab'),
+        verb
+    )
+elif get_value(g, 'mle'):
+    gp.mle(
+        'nugget',
+        get_value(g, 'min'),
+        get_value(g, 'max'),
+        get_value(g, 'ab'),
+        verb
+    )

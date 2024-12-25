@@ -250,22 +250,7 @@ def _laGP(Xref: np.ndarray,
         
         # Re-estimate parameters periodically if requested TODO: do we need this?
         # if param_est and (i - start + 1) % est_freq == 0:
-        #     if get_value(d, 'mle') and get_value(g, 'mle'):
-        #         if gp.dK is None:
-        #             gp.new_dK()
-        #         gp.jmle(drange = (get_value(d, 'min'), get_value(d, 'max')), 
-        #                 grange = (get_value(g, 'min'), get_value(g, 'max')), 
-        #                 dab = get_value(d, 'ab'), 
-        #                 gab = get_value(g, 'ab'), 
-        #                 verb = verb)
-        #     elif get_value(d, 'mle'):
-        #         if gp.dK is None:
-        #             gp.new_dK()
-        #         gp.mle('lengthscale', get_value(d, 'min'), get_value(d, 'max'), 
-        #             get_value(d, 'ab'), verb)
-        #     elif get_value(g, 'mle'):
-        #         gp.mle('nugget', get_value(g, 'min'), get_value(g, 'max'), 
-        #             get_value(g, 'ab'), verb)
+        #     optimize_parameters(gp, d, g, verb)
 
         # Update candidate set
         if w != len(cand_idx) - 1:
@@ -282,23 +267,8 @@ def _laGP(Xref: np.ndarray,
             cand_idx = cand_idx[:-1]
             Xcand = Xcand[:-1]
     
-    # If required MLE calculation to obtain posterior parameters and update gp before prediction
-    if get_value(d, 'mle') and get_value(g, 'mle'):
-        if gp.dK is None:
-            gp.new_dK()
-        gp.jmle(drange = (get_value(d, 'min'), get_value(d, 'max')), 
-                grange = (get_value(g, 'min'), get_value(g, 'max')), 
-                dab = get_value(d, 'ab'), 
-                gab = get_value(g, 'ab'), 
-                verb = verb)
-    elif get_value(d, 'mle'):
-        if gp.dK is None:
-            gp.new_dK()
-        gp.mle('lengthscale', get_value(d, 'min'), get_value(d, 'max'), 
-               get_value(d, 'ab'), verb)
-    elif get_value(g, 'mle'):
-        gp.mle('nugget', get_value(g, 'min'), get_value(g, 'max'), 
-               get_value(g, 'ab'), verb)
+    # If required, obtain parameter posterior by MLE and update gp before prediction
+    optimize_parameters(gp, d, g, verb)
 
     # Given the updated gp, predict values and return results
     if lite:
