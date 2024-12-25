@@ -31,10 +31,7 @@ def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
             # Broadcasting to compute differences
             diff = X1[:, i:i+1] - X1[:, i:i+1].T
             D += diff * diff
-            
-        # Take square root for Euclidean distance 
-        # TODO: check if we need to take the square root
-        # np.sqrt(D, out=D)
+
         return D
         
     else:

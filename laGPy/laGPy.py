@@ -20,103 +20,6 @@ class Method(Enum):
     EFI = 5
     NN = 6
 
-# class MLEResult(NamedTuple):
-#     """Results from MLE optimization"""
-#     lengthscale: float  # Optimized lengthscale
-#     nugget: float      # Optimized nugget
-#     iterations: int    # Number of iterations
-#     success: bool      # Whether optimization succeeded
-#     llik: float       # Log likelihood at optimum
-
-# def joint_mle_gp(gp: GP, 
-#                 d_range: Tuple[float, float] = (1e-6, 1.0),
-#                 g_range: Tuple[float, float] = (1e-6, 1.0),
-#                 verb: int = 0) -> MLEResult:
-#     """
-#     Joint maximum likelihood estimation for GP lengthscale and nugget
-    
-#     Args:
-#         gp: GP instance
-#         d_range: (min, max) range for lengthscale
-#         g_range: (min, max) range for nugget
-#         verb: Verbosity level
-        
-#     Returns:
-#         MLEResult containing optimized values and optimization info
-#     """
-#     def neg_log_likelihood(theta):
-#         """Negative log likelihood function for joint optimization"""
-#         d, g = theta
-        
-#         # Update GP parameters
-#         gp.d = d
-#         gp.g = g
-#         gp.update_covariance()
-        
-#         try:
-#             # Log determinant term
-#             sign, logdet = np.linalg.slogdet(gp.K)
-#             if sign <= 0:
-#                 return np.inf
-                
-#             # Quadratic term
-#             alpha = np.linalg.solve(gp.K, gp.Z)
-#             quad = np.dot(gp.Z, alpha)
-            
-#             # Full negative log likelihood
-#             nll = 0.5 * (logdet + quad + len(gp.Z) * np.log(2 * np.pi))
-#             return nll
-#         except np.linalg.LinAlgError:
-#             return np.inf
-
-#     # Initial parameter values - use geometric mean of bounds
-#     d0 = np.sqrt(d_range[0] * d_range[1])
-#     g0 = np.sqrt(g_range[0] * g_range[1])
-    
-#     # Optimize
-#     result = minimize(
-#         neg_log_likelihood,
-#         x0=[d0, g0],
-#         method='L-BFGS-B',
-#         bounds=[d_range, g_range],
-#         options={'maxiter': 100, 'disp': verb > 0}
-#     )
-    
-#     # Update GP with optimal parameters
-#     if result.success:
-#         gp.d = result.x[0]
-#         gp.g = result.x[1]
-#         gp.update_covariance()
-    
-#     return MLEResult(
-#         lengthscale=result.x[0],
-#         nugget=result.x[1],
-#         iterations=result.nit,
-#         success=result.success,
-#         llik=-result.fun
-#     )
-
-# def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]:
-#     """
-#     Estimate initial lengthscale and nugget parameters
-    
-#     Args:
-#         X: Input locations
-#         Z: Output values
-        
-#     Returns:
-#         Tuple of (lengthscale, nugget) estimates
-#     """
-#     # Estimate lengthscale using median distance
-#     dists = np.sqrt(((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2))
-#     d = np.median(dists[dists > 0])
-    
-#     # Estimate nugget using output variance
-#     z_std = np.std(Z)
-#     g = (0.01 * z_std)**2  # Start with 1% of variance
-    
-#     return d, g
-
 def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
                    close: int, sorted: bool = False) -> np.ndarray:
     """
@@ -328,7 +231,7 @@ def laGP(Xref: np.ndarray,
             d: Lengthscale parameters
             g: Nugget parameters
             close: Number of close points used
-            Xi: Selected indices (if Xi_ret=True)
+            selected: Selected indices (zero-indexed)
     """
     # Method mapping
     method_map = {
