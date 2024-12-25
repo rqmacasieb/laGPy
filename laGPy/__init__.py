@@ -1,3 +1,25 @@
+"""laGPy: Python implementation of local approximate GP"""
+
+
+from .laGPy import (
+    Method,
+    closest_indices,
+    laGP,
+    calc_ktKikx
+)
+
+# Import from covar.py
+from .covar import (
+    covar,
+    diff_covar_symm
+)
+
+# Import from params.py
+from .params import (
+    darg,
+    garg
+)
+
 # Import from utils.distance
 from .utils.distance import (
     distance,
