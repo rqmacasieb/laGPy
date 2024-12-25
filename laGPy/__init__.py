@@ -1,12 +1,14 @@
 """laGPy: Python implementation of local approximate GP"""
 
 # lagpy/__init__.py
-from .laGPy import laGP, Method, MLEResult
-from .gp import GP, new_gp, pred_gp, update_gp
+from .laGPy import *
+from .gp import *
 from .covar import *
 from .matrix import get_data_rect
 from .order import order, rank, rand_indices
 from .covar_sep import covar_sep_symm, covar_sep, diff_covar_sep, diff_covar_sep_symm
+from .utils.distance import *
+from .prior import *
 
 from . import _version
 __version__ = _version.get_versions()['version']

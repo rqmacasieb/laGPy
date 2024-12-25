@@ -8,6 +8,9 @@ from .matrix import get_data_rect
 from .order import order
 from .covar_sep import *
 from .covar import *
+from .prior import *
+import time
+from .utils.distance import distance_asymm
 
 class Method(Enum):
     ALC = 1
@@ -17,102 +20,102 @@ class Method(Enum):
     EFI = 5
     NN = 6
 
-class MLEResult(NamedTuple):
-    """Results from MLE optimization"""
-    lengthscale: float  # Optimized lengthscale
-    nugget: float      # Optimized nugget
-    iterations: int    # Number of iterations
-    success: bool      # Whether optimization succeeded
-    llik: float       # Log likelihood at optimum
+# class MLEResult(NamedTuple):
+#     """Results from MLE optimization"""
+#     lengthscale: float  # Optimized lengthscale
+#     nugget: float      # Optimized nugget
+#     iterations: int    # Number of iterations
+#     success: bool      # Whether optimization succeeded
+#     llik: float       # Log likelihood at optimum
 
-def joint_mle_gp(gp: GP, 
-                d_range: Tuple[float, float] = (1e-6, 1.0),
-                g_range: Tuple[float, float] = (1e-6, 1.0),
-                verb: int = 0) -> MLEResult:
-    """
-    Joint maximum likelihood estimation for GP lengthscale and nugget
+# def joint_mle_gp(gp: GP, 
+#                 d_range: Tuple[float, float] = (1e-6, 1.0),
+#                 g_range: Tuple[float, float] = (1e-6, 1.0),
+#                 verb: int = 0) -> MLEResult:
+#     """
+#     Joint maximum likelihood estimation for GP lengthscale and nugget
     
-    Args:
-        gp: GP instance
-        d_range: (min, max) range for lengthscale
-        g_range: (min, max) range for nugget
-        verb: Verbosity level
+#     Args:
+#         gp: GP instance
+#         d_range: (min, max) range for lengthscale
+#         g_range: (min, max) range for nugget
+#         verb: Verbosity level
         
-    Returns:
-        MLEResult containing optimized values and optimization info
-    """
-    def neg_log_likelihood(theta):
-        """Negative log likelihood function for joint optimization"""
-        d, g = theta
+#     Returns:
+#         MLEResult containing optimized values and optimization info
+#     """
+#     def neg_log_likelihood(theta):
+#         """Negative log likelihood function for joint optimization"""
+#         d, g = theta
         
-        # Update GP parameters
-        gp.d = d
-        gp.g = g
-        gp.update_covariance()
+#         # Update GP parameters
+#         gp.d = d
+#         gp.g = g
+#         gp.update_covariance()
         
-        try:
-            # Log determinant term
-            sign, logdet = np.linalg.slogdet(gp.K)
-            if sign <= 0:
-                return np.inf
+#         try:
+#             # Log determinant term
+#             sign, logdet = np.linalg.slogdet(gp.K)
+#             if sign <= 0:
+#                 return np.inf
                 
-            # Quadratic term
-            alpha = np.linalg.solve(gp.K, gp.Z)
-            quad = np.dot(gp.Z, alpha)
+#             # Quadratic term
+#             alpha = np.linalg.solve(gp.K, gp.Z)
+#             quad = np.dot(gp.Z, alpha)
             
-            # Full negative log likelihood
-            nll = 0.5 * (logdet + quad + len(gp.Z) * np.log(2 * np.pi))
-            return nll
-        except np.linalg.LinAlgError:
-            return np.inf
+#             # Full negative log likelihood
+#             nll = 0.5 * (logdet + quad + len(gp.Z) * np.log(2 * np.pi))
+#             return nll
+#         except np.linalg.LinAlgError:
+#             return np.inf
 
-    # Initial parameter values - use geometric mean of bounds
-    d0 = np.sqrt(d_range[0] * d_range[1])
-    g0 = np.sqrt(g_range[0] * g_range[1])
+#     # Initial parameter values - use geometric mean of bounds
+#     d0 = np.sqrt(d_range[0] * d_range[1])
+#     g0 = np.sqrt(g_range[0] * g_range[1])
     
-    # Optimize
-    result = minimize(
-        neg_log_likelihood,
-        x0=[d0, g0],
-        method='L-BFGS-B',
-        bounds=[d_range, g_range],
-        options={'maxiter': 100, 'disp': verb > 0}
-    )
+#     # Optimize
+#     result = minimize(
+#         neg_log_likelihood,
+#         x0=[d0, g0],
+#         method='L-BFGS-B',
+#         bounds=[d_range, g_range],
+#         options={'maxiter': 100, 'disp': verb > 0}
+#     )
     
-    # Update GP with optimal parameters
-    if result.success:
-        gp.d = result.x[0]
-        gp.g = result.x[1]
-        gp.update_covariance()
+#     # Update GP with optimal parameters
+#     if result.success:
+#         gp.d = result.x[0]
+#         gp.g = result.x[1]
+#         gp.update_covariance()
     
-    return MLEResult(
-        lengthscale=result.x[0],
-        nugget=result.x[1],
-        iterations=result.nit,
-        success=result.success,
-        llik=-result.fun
-    )
+#     return MLEResult(
+#         lengthscale=result.x[0],
+#         nugget=result.x[1],
+#         iterations=result.nit,
+#         success=result.success,
+#         llik=-result.fun
+#     )
 
-def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]:
-    """
-    Estimate initial lengthscale and nugget parameters
+# def estimate_initial_params(X: np.ndarray, Z: np.ndarray) -> Tuple[float, float]:
+#     """
+#     Estimate initial lengthscale and nugget parameters
     
-    Args:
-        X: Input locations
-        Z: Output values
+#     Args:
+#         X: Input locations
+#         Z: Output values
         
-    Returns:
-        Tuple of (lengthscale, nugget) estimates
-    """
-    # Estimate lengthscale using median distance
-    dists = np.sqrt(((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2))
-    d = np.median(dists[dists > 0])
+#     Returns:
+#         Tuple of (lengthscale, nugget) estimates
+#     """
+#     # Estimate lengthscale using median distance
+#     dists = np.sqrt(((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2))
+#     d = np.median(dists[dists > 0])
     
-    # Estimate nugget using output variance
-    z_std = np.std(Z)
-    g = (0.01 * z_std)**2  # Start with 1% of variance
+#     # Estimate nugget using output variance
+#     z_std = np.std(Z)
+#     g = (0.01 * z_std)**2  # Start with 1% of variance
     
-    return d, g
+#     return d, g
 
 def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
                    close: int, sorted: bool = False) -> np.ndarray:
@@ -135,10 +138,11 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
         Xref = Xref.reshape(1, -1)
 
     # Calculate distances to reference location(s)
-    D = np.zeros(n)
-    for i in range(Xref.shape[1]):
-        diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
-        D += np.min(diff**2, axis=0)  # Take minimum across reference points
+    D = distance_asymm(X, Xref)
+    # D = np.zeros(n)
+    # for i in range(Xref.shape[1]):
+    #     diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
+    #     D += np.min(diff**2, axis=0)  # Take minimum across reference points
 
     # Get indices of closest points
     if n > close:
@@ -148,23 +152,26 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
         
     # Sort by distance if requested
     if sorted:
-        idx = idx[np.argsort(D[idx])]
+        idx = idx[np.argsort(D[idx].reshape(-1))]
     elif start < close:
         # Partially sort to get start closest
-        idx = np.argpartition(D[idx], start)
+        idx = np.argpartition(D[idx].reshape(-1), start)
         
     return idx
 
-def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray, 
-         Z: np.ndarray, n: Optional[int] = None, d: Optional[float] = None, g: Optional[float] = 1/10000, 
-         method: Method = Method.ALC, close: Optional[int] = None,
-         param_est: bool = True, 
-         d_range: Tuple[float, float] = (1e-6, 1.0),
-         g_range: Tuple[float, float] = (1e-6, 1.0),
-         est_freq: int = 10,  # How often to re-estimate parameters
-         alc_gpu: bool = False, numstart: int = 1, 
+def _laGP(Xref: np.ndarray, 
+         start: int, 
+         end: int, 
+         X: np.ndarray, 
+         Z: np.ndarray, 
+         d: Optional[Union[float, Tuple[float, float]]] = None,
+         g: float = 1/10000,
+         method: Method = Method.ALC,  # Use Method enum
+         close: Optional[int] = None,
+         numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
-         verb: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
+         lite: bool = True,
+         verb: int = 0) -> Tuple[float, float, float, float, float]:
     """
     Local Approximate GP prediction with parameter estimation
     
@@ -186,6 +193,7 @@ def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray,
         alc_gpu: Whether to use GPU for ALC calculations
         numstart: Number of starting points for ALCRAY
         rect: Optional rectangle bounds
+        lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
         
     Returns:
@@ -196,62 +204,35 @@ def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray,
         - Final length scale
         - Final nugget
     """
-    if n is None:
-        n = X.shape[0]
-
-    if close is None:
-        close = min((1000 + end) * (10 if method in [Method.ALCRAY, Method.ALCOPT] else 1), X.shape[0])
-
-    #check input dimension
-    if Xref.shape[1] != X.shape[1]:
-        raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
+    n = X.shape[0]
+    m = X.shape[1]
+    nref = Xref.shape[0]
 
     # Get closest points for initial design
     idx = closest_indices(start, Xref, n, X, close, 
-                         method in (Method.ALCRAY, Method.ALCOPT))
-    
-    # Initial data
-    X_init = X[idx[:start]]
-    Z_init = Z[idx[:start]]
-    
-    # Initial parameter estimates if not provided
-    if d is None or g is None:
-        d_est, g_est = estimate_initial_params(X_init, Z_init)
-        d = d_est if d is None else d
-        g = g_est if g is None else g
-        
-        if verb > 0:
-            print(f"Initial estimates: lengthscale={d:.6f}, nugget={g:.6f}")
-    
-    # Build initial GP
-    gp = new_gp(X_init, Z_init, d, g)
-    
-    # Initial parameter optimization if requested
-    if param_est:
-        mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
-        if verb > 0:
-            print(f"MLE results: lengthscale={mle_result.lengthscale:.6f}, "
-                  f"nugget={mle_result.nugget:.6f} "
-                  f"(iterations: {mle_result.iterations})")
-    
+                         method in ["alcray", "alcopt"])
     # Setup candidate points
     cand_idx = idx[start:]
     Xcand = X[cand_idx]
+    selected = np.zeros(end, dtype=int)
+    selected[:start] = idx[:start]
+
+    # Build initial GP
+    X_init = X[idx[:start]]
+    Z_init = Z[idx[:start]]
+    
+    gp = new_gp(X_init, Z_init, get_start_value(d), get_start_value(g)) #TODO: check if this is correct
     
     # Get rect bounds if needed
     if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
         rect = get_data_rect(Xcand)
-        
-    # Storage for selected indices
-    selected = np.zeros(end, dtype=int)
-    selected[:start] = idx[:start]
     
     # Iteratively select points
     for i in range(start, end):
         # Point selection logic based on method
         if method == Method.ALCRAY:
-            roundrobin = (i - start + 1) % int(np.sqrt(i - start + 1))
-            w = alcray_selection(gp, Xcand, Xref, roundrobin, numstart, rect, verb)
+            offset = (i - start + 1) % int(np.sqrt(i - start + 1))
+            w = alcray_selection(gp, Xcand, Xref, offset, numstart, rect, verb)
         elif method == Method.ALC:
             scores = alc(gp, Xcand, Xref, verb) #no gpu support for now
             w = np.argmax(scores)
@@ -264,16 +245,17 @@ def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray,
         # Record chosen point
         selected[i] = cand_idx[w]
         
-        # Update GP
-        gp = update_gp(gp, Xcand[w:w+1], Z[cand_idx[w:w+1]])
+        # Update GP with chosen candidate
+        gp.update(Xcand[w:w+1], Z[cand_idx[w:w+1]], verb=verb-1)
         
-        # Re-estimate parameters periodically if requested
-        if param_est and (i - start + 1) % est_freq == 0:
-            mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
-            if verb > 0:
-                print(f"Update {i}: lengthscale={mle_result.lengthscale:.6f}, "
-                      f"nugget={mle_result.nugget:.6f}")
+        # Re-estimate parameters periodically if requested TODO: do we need this?
+        # if param_est and (i - start + 1) % est_freq == 0:
+        #     mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
+        #     if verb > 0:
+        #         print(f"Update {i}: lengthscale={mle_result.lengthscale:.6f}, "
+        #               f"nugget={mle_result.nugget:.6f}")
         
+
         # Update candidate set
         if w != len(cand_idx) - 1:
             if method in ['alcray', 'alcopt']:
@@ -289,10 +271,182 @@ def laGP(start: int, end: int, Xref: np.ndarray, X: np.ndarray,
             cand_idx = cand_idx[:-1]
             Xcand = Xcand[:-1]
     
-    # Final predictions
-    mean, var = pred_gp(gp, Xref)
+    # Possibly do MLE calculation
+    if d is not None and g is not None:
+        if gp.dK is None:
+            gp.new_dK()
+        gp.jmle((1e-6, 1.0), (1e-6, 1.0), (0.0, 0.0), (0.0, 0.0), verb)
+    elif d is not None:
+        if gp.dK is None:
+            gp.new_dK()
+        gp.mle('lengthscale', 1e-6, 1.0, (0.0, 0.0), verb)
+    elif g is not None:
+        gp.mle('nugget', 1e-6, 1.0, (0.0, 0.0), verb)
+
+    # Now predict
+    if lite:
+        mean_pred, s2_pred, df, llik = gp.predict_lite(Xref)
+    else:
+        mean_pred, s2_pred, df, llik = gp.predict(Xref)
     
-    return mean, var, selected, gp.d, gp.g
+    return {
+        "mean": mean_pred,
+        "s2": s2_pred,
+        "df": df,
+        "llik": llik,
+        "selected": selected,
+        "d_posterior": gp.d,
+        "g_posterior": gp.g,
+    }
+
+def laGP(Xref: np.ndarray, 
+         start: int, 
+         end: int, 
+         X: np.ndarray, 
+         Z: np.ndarray, 
+         d: Optional[Union[float, Tuple[float, float]]] = None,
+         g: float = 1/10000,
+         method: str = "alc",
+         Xi_ret: bool = True,
+         close: Optional[int] = None,
+         numstart: Optional[int] = None,
+         rect: Optional[np.ndarray] = None,
+         lite: bool = True,
+         verb: int = 0) -> Dict:
+    """
+    Local Approximate Gaussian Process Regression.
+    Combined Python equivalent of laGP.R and laGP_R.c
+    
+    Args:
+        Xref: Reference points for prediction (n_ref × m)
+        start: Initial design size (must be >= 6)
+        end: Final design size
+        X: Training inputs (n × m)
+        Z: Training outputs (n,)
+        d: Lengthscale parameter or tuple of (start, mle)
+        g: Nugget parameter
+        method: One of "alc", "alcopt", "alcray", "mspe", "nn", "fish"
+        Xi_ret: Whether to return selected indices
+        close: Number of close points to consider
+        alc_gpu: Whether to use GPU for ALC calculations
+        numstart: Number of starting points for ray-based methods
+        rect: Rectangle bounds for ray-based methods
+        lite: Whether to use lite version (only diagonal of covariance)
+        verb: Verbosity level
+        
+    Returns:
+        Dictionary containing:
+            mean: Predicted means
+            s2/Sigma: Predicted variances/covariance matrix
+            df: Degrees of freedom
+            llik: Log likelihood
+            time: Computation time
+            method: Method used
+            d: Lengthscale parameters
+            g: Nugget parameters
+            close: Number of close points used
+            Xi: Selected indices (if Xi_ret=True)
+    """
+    # Method mapping
+    method_map = {
+        "alc": 1, "alcopt": 2, "alcray": 3,
+        "mspe": 4, "fish": 5, "nn": 6
+    }
+    
+    # Input processing
+    method = method.lower()
+    if method not in method_map:
+        raise ValueError(f"Unknown method: {method}")
+    imethod = method_map[method]
+    
+    # Convert inputs to numpy arrays
+    X = np.asarray(X)
+    Z = np.asarray(Z)
+    Xref = np.atleast_2d(Xref)
+    
+    # Get dimensions
+    m = X.shape[1]
+    n = X.shape[0]
+    nref = Xref.shape[0]
+    
+    # Input validation
+    if start < 6 or end <= start:
+        raise ValueError("must have 6 <= start < end")
+    if Xref.shape[1] != m:
+        raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
+    if len(Z) != n:
+        raise ValueError("Length of Z must match number of rows in X")
+    
+    # Set defaults
+    if close is None:
+        mult = 10 if method in ["alcray", "alcopt"] else 1
+        close = min((1000 + end) * mult, n)
+    if numstart is None:
+        numstart = m if method == "alcray" else 1
+    
+    # Process rect
+    if method in ["alcray", "alcopt"]:
+        if rect is None:
+            rect = np.zeros((2, m))
+        if method == "alcray" and nref != 1:
+            raise ValueError("alcray only implemented for nrow(Xref) = 1")
+    else:
+        rect = np.zeros(1)
+    
+    # Process parameters
+    d_prior = darg(d, X)
+    g_prior = garg(g, Z)
+    
+    # Initialize output arrays
+    mean = np.zeros(nref)
+    s2dim = nref if lite else nref * nref
+    s2 = np.zeros(s2dim)
+    Xi = np.zeros(end, dtype=int) if Xi_ret else None
+    
+    # Start timing
+    tic = time.time()
+    
+    # Call core implementation
+    results = _laGP(Xref=Xref,
+        start=start, end=end, X=X, Z=Z,        
+        d=d_prior, g=g_prior,
+        method=Method(imethod),
+        close=close,
+        numstart=numstart,
+        rect=rect,
+        verb=verb,
+        lite=lite
+    )
+    
+    # Assemble results
+    result = {
+        'mean': results['mean'],
+        's2': results['s2'],
+        'selected': results['selected'],
+        'df': results['df'],
+        'llik': results['llik'],
+        'time': time.time() - tic,
+        'method': method,
+        'd': results['d_posterior'],
+        'g': results['g_posterior'],
+        'close': close
+    }
+    
+    # Add s2/Sigma
+    if lite:
+        result['s2'] = s2
+    else:
+        result['Sigma'] = s2.reshape(nref, nref)
+    
+    # Add Xi if requested
+    if Xi_ret:
+        result['Xi'] = Xi
+    
+    # Add ray info if needed
+    if method in ["alcray", "alcopt"]:
+        result['numstart'] = numstart
+    
+    return result
 
 def alc(gp, Xcand, Xref, verb=0):
     """
@@ -433,16 +587,5 @@ def calc_alc(m, ktKik, s2p, phi, tdf, badj=None, w=None):
     
     return alc / m
 
-#these are placeholder functions for now. Will develop these later if needed.
-def mspe(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:
-    """Calculate MSPE criterion"""
-    # Implementation of MSPE calculations
-    pass
 
-def alcray_selection(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, 
-                    roundrobin: int, numstart: int, rect: np.ndarray,
-                    verb: int = 0) -> int:
-    """ALCRAY point selection"""
-    # Implementation of ALCRAY selection
-    pass
 

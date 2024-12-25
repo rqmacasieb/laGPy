@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Optional
+from typing import Optional, Tuple
 
 def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
     """
@@ -90,3 +90,35 @@ def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
     gvec *= -1.0 / mui
 
     return mui, gvec, kx, kxy
+
+def diff_covar_symm(X: np.ndarray, d: float) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate first and second derivatives of the symmetric covariance matrix.
+    
+    Args:
+        X: Input matrix (n x m)
+        d: Length scale parameter
+        
+    Returns:
+        Tuple of (dK, d2K) - first and second derivatives
+    """
+    n = X.shape[0]
+    dK = np.zeros((n, n))
+    d2K = np.zeros((n, n))
+    
+    # Calculate pairwise distances
+    for i in range(n):
+        for j in range(i+1):
+            dist = np.sum((X[i] - X[j])**2)
+            exp_term = np.exp(-0.5 * dist / d**2)
+            
+            # First derivative
+            dK[i,j] = exp_term * dist / d**3
+            dK[j,i] = dK[i,j]  # symmetric
+            
+            # Second derivative
+            d2K[i,j] = exp_term * dist * (dist - 3*d**2) / d**6
+            d2K[j,i] = d2K[i,j]  # symmetric
+            
+    return dK, d2K
+
