@@ -195,7 +195,7 @@ def laGP(Xref: np.ndarray,
          Z: np.ndarray, 
          d: Optional[Union[float, Tuple[float, float]]] = None,
          g: float = 1/10000,
-         method: str = "alc",
+         method: Union[str, Method] = "alc",
          close: Optional[int] = None,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
@@ -233,14 +233,18 @@ def laGP(Xref: np.ndarray,
             close: Number of close points used
             selected: Selected indices (zero-indexed)
     """
+    if isinstance(method, Method):
+        method = method.name.lower()
+    else:
+        method = method.lower()
+
     # Method mapping
     method_map = {
-        "alc": 1, "alcopt": 2, "alcray": 3,
-        "mspe": 4, "fish": 5, "nn": 6
+        "alc": Method.ALC, "alcopt": Method.ALCOPT, "alcray": Method.ALCRAY,
+        "mspe": Method.MSPE, "fish": Method.EFI, "nn": Method.NN
     }
     
     # Input processing
-    method = method.lower()
     if method not in method_map:
         raise ValueError(f"Unknown method: {method}")
     imethod = method_map[method]
