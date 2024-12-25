@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 .eggs/
+laGPy/__pycache__/
 
 # Ignore validation run files
 validation/
