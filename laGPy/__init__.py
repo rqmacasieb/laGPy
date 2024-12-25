@@ -9,6 +9,7 @@ from .order import order, rank, rand_indices
 from .covar_sep import covar_sep_symm, covar_sep, diff_covar_sep, diff_covar_sep_symm
 from .utils.distance import *
 from .params import *
+from .gamma import *
 
 from . import _version
 __version__ = _version.get_versions()['version']
@@ -28,5 +29,6 @@ __all__ = [
     'order',
     'rank',
     'rand_indices',
+    'gamma',
     '__version__'
 ]

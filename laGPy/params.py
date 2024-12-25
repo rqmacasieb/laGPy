@@ -1,6 +1,7 @@
 from typing import Optional, Union, Dict, List
 import numpy as np
-from scipy.special import gamma
+from scipy.special import gamma as sp_gamma, gammaln as sp_gammaln, gammaincinv as sp_gammaincinv
+from laGPy.gamma import Rgamma_inv as lgp_Rgamma_inv, Cgamma as lgp_Cgamma, Igamma_inv as lgp_Igamma_inv
 from .utils.distance import distance
 from .gp import *
 
@@ -29,31 +30,38 @@ def check_arg(d: Dict) -> None:
     if len(d['ab']) != 2 or any(a < 0 for a in d['ab']):
         raise ValueError("ab should be a positive 2-vector")
 
-def Igamma_inv(a: float, y: float, lower: bool = False, log: bool = False) -> float:
-    """
-    Calculate the beta parameter of an Inverse Gamma distribution.
+# def Igamma_inv(a: float, y: float, lower: bool = False, log: bool = False) -> float:
+#     """
+#     Calculate the beta parameter of an Inverse Gamma distribution.
     
-    Args:
-        a: Shape parameter
-        y: Location parameter
-        lower: Whether to use lower tail
-        log: Whether y is in log scale
+#     Args:
+#         a: Shape parameter
+#         y: Location parameter
+#         lower: Whether to use lower tail
+#         log: Whether y is in log scale
     
-    Returns:
-        Beta parameter value
-    """
-    from scipy.stats import invgamma
-    if log:
-        y = np.exp(y)
-    if lower:
-        p = y
-    else:
-        p = 1 - y
-    return invgamma.ppf(p, a)
+#     Returns:
+#         Beta parameter value
+#     """
+#     from scipy.stats import invgamma
+#     if log:
+#         y = np.exp(y)
+#     if lower:
+#         p = y
+#     else:
+#         p = 1 - y
+#     return invgamma.ppf(p, a)
 
 def get_Ds(X: np.ndarray, p: float = 0.1, samp_size: int = 1000) -> Dict:
     """
     Calculate initial starting value and range for lengthscale parameter.
+    
+    Args:
+        X: Input data matrix.
+        samp_size: Sample size for distance calculations.
+        
+    Returns:
+        Dictionary with 'start', 'min', and 'max' values.
     """
     if X.shape[0] > samp_size:
         idx = np.random.choice(X.shape[0], samp_size, replace=False)
@@ -135,11 +143,11 @@ def garg(g: Optional[Union[float, Dict]] = None,
             g['ab'] = [3/2, np.nan]
         if isinstance(g['ab'], (list, np.ndarray)) and len(g['ab']) > 1 and np.isnan(g['ab'][1]):
             s2max = np.mean(r2s)
-            g['ab'][1] = Igamma_inv(
+            g['ab'][1] = lgp_Igamma_inv(
                 g['ab'][0], 
-                0.95 * gamma(g['ab'][0]), 
+                0.95 * sp_gamma(0.95, g['ab'][0]), 
                 lower=True, 
-                log=False
+                ulog=False
             ) / s2max
     
     # Check validity of values
@@ -218,11 +226,11 @@ def darg(d: Optional[Union[float, Dict]] = None,
         if 'ab' not in d:
             d['ab'] = [3/2, np.nan]
         if isinstance(d['ab'], (list, np.ndarray)) and len(d['ab']) > 1 and np.isnan(d['ab'][1]):
-            d['ab'][1] = Igamma_inv(
+            d['ab'][1] = lgp_Igamma_inv(
                 d['ab'][0], 
-                0.95 * gamma(d['ab'][0]), 
+                0.95 * sp_gamma(d['ab'][0]), 
                 lower=True, 
-                log=False
+                ulog=False
             ) / Ds['max']
     
     # Check validity of values
@@ -251,41 +259,41 @@ def get_value(param, key_or_index):
     else:
         raise ValueError("Parameter must be a dictionary or a list/tuple.")
     
-def optimize_parameters(gp, d, g, verb):
-"""
-Optimize the GP parameters using JMLE or MLE based on the provided settings.
+# def optimize_parameters(gp, d, g, verb):
+#     """
+#     Optimize the GP parameters using JMLE or MLE based on the provided settings.
 
-Args:
-    gp: The Gaussian Process instance.
-    d: Lengthscale parameter specification (dict or list).
-    g: Nugget parameter specification (dict or list).
-    verb: Verbosity level.
-"""
-if get_value(d, 'mle') and get_value(g, 'mle'):
-    if gp.dK is None:
-        gp.new_dK()
-    gp.jmle(
-        drange=(get_value(d, 'min'), get_value(d, 'max')),
-        grange=(get_value(g, 'min'), get_value(g, 'max')),
-        dab=get_value(d, 'ab'),
-        gab=get_value(g, 'ab'),
-        verb=verb
-    )
-elif get_value(d, 'mle'):
-    if gp.dK is None:
-        gp.new_dK()
-    gp.mle(
-        'lengthscale',
-        get_value(d, 'min'),
-        get_value(d, 'max'),
-        get_value(d, 'ab'),
-        verb
-    )
-elif get_value(g, 'mle'):
-    gp.mle(
-        'nugget',
-        get_value(g, 'min'),
-        get_value(g, 'max'),
-        get_value(g, 'ab'),
-        verb
-    )
+#     Args:
+#         gp: The Gaussian Process instance.
+#         d: Lengthscale parameter specification (dict or list).
+#         g: Nugget parameter specification (dict or list).
+#         verb: Verbosity level.
+#     """
+#     if get_value(d, 'mle') and get_value(g, 'mle'):
+#         if gp.dK is None:
+#             gp.new_dK()
+#         gp.jmle(
+#             drange=(get_value(d, 'min'), get_value(d, 'max')),
+#             grange=(get_value(g, 'min'), get_value(g, 'max')),
+#             dab=get_value(d, 'ab'),
+#             gab=get_value(g, 'ab'),
+#             verb=verb
+#         )
+#     elif get_value(d, 'mle'):
+#         if gp.dK is None:
+#             gp.new_dK()
+#         gp.mle(
+#             'lengthscale',
+#             get_value(d, 'min'),
+#             get_value(d, 'max'),
+#             get_value(d, 'ab'),
+#             verb
+#         )
+#     elif get_value(g, 'mle'):
+#         gp.mle(
+#             'nugget',
+#             get_value(g, 'min'),
+#             get_value(g, 'max'),
+#             get_value(g, 'ab'),
+#             verb
+#         )

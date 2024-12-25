@@ -266,9 +266,29 @@ def _laGP(Xref: np.ndarray,
                 Xcand[w] = Xcand[-1]
             cand_idx = cand_idx[:-1]
             Xcand = Xcand[:-1]
-    
+        elif w == len(cand_idx) - 1:
+            cand_idx = cand_idx[:-1]
+            Xcand = Xcand[:-1]
+        else:
+            raise ValueError("candidate index is out of bounds")
+
     # If required, obtain parameter posterior by MLE and update gp before prediction
-    optimize_parameters(gp, d, g, verb)
+    if get_value(d, 'mle') and get_value(g, 'mle'):
+        if gp.dK is None:
+            gp.new_dK()
+        gp.jmle(drange = (get_value(d, 'min'), get_value(d, 'max')), 
+                grange = (get_value(g, 'min'), get_value(g, 'max')), 
+                dab = get_value(d, 'ab'), 
+                gab = get_value(g, 'ab'), 
+                verb = verb)
+    elif get_value(d, 'mle'):
+        if gp.dK is None:
+            gp.new_dK()
+        gp.mle('lengthscale', get_value(d, 'min'), get_value(d, 'max'), 
+               get_value(d, 'ab'), verb)
+    elif get_value(g, 'mle'):
+        gp.mle('nugget', get_value(g, 'min'), get_value(g, 'max'), 
+               get_value(g, 'ab'), verb)
 
     # Given the updated gp, predict values and return results
     if lite:

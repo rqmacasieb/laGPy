@@ -1,27 +1,27 @@
 import numpy as np
 from typing import Optional, Tuple
-
-def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
-    """
-    Calculate pairwise distances between points
+from .utils.distance import distance
+# def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
+#     """
+#     Calculate pairwise distances between points
     
-    Args:
-        X1: First set of points
-        X2: Optional second set of points (if None, use X1)
+#     Args:
+#         X1: First set of points
+#         X2: Optional second set of points (if None, use X1)
         
-    Returns:
-        Matrix of pairwise distances
-    """
-    if X2 is None:
-        X2 = X1
+#     Returns:
+#         Matrix of pairwise distances
+#     """
+#     if X2 is None:
+#         X2 = X1
         
-    n1, m = X1.shape
-    n2 = X2.shape[0]
+#     n1, m = X1.shape
+#     n2 = X2.shape[0]
     
-    D = np.zeros((n1, n2))
-    for i in range(m):
-        D += (X1[:, i:i+1] - X2[:, i].reshape(1, -1))**2
-    return D
+#     D = np.zeros((n1, n2))
+#     for i in range(m):
+#         D += (X1[:, i:i+1] - X2[:, i].reshape(1, -1))**2
+#     return D
 
 def covar(X1: np.ndarray, X2: np.ndarray, d: float, g: float = 0.0) -> np.ndarray:
     """
