@@ -423,7 +423,7 @@ class GP:
         
         # Print message if verbose
         if verb > 0:
-            print(f"Ropt {msg}: told={th} -[{info.its}]-> tnew={tnew}")
+            print(f"opt {msg}: told={th} -[{info.its}]-> tnew={tnew}")
         
         return tnew
 

@@ -8,7 +8,7 @@ from .matrix import get_data_rect
 from .order import order
 from .covar_sep import *
 from .covar import *
-from .prior import *
+from .params import *
 import time
 from .utils.distance import distance_asymm
 
@@ -221,22 +221,22 @@ def _laGP(Xref: np.ndarray,
     X_init = X[idx[:start]]
     Z_init = Z[idx[:start]]
     
-    gp = new_gp(X_init, Z_init, get_start_value(d), get_start_value(g)) #TODO: check if this is correct
+    gp = new_gp(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
     
     # Get rect bounds if needed
     if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
         rect = get_data_rect(Xcand)
     
-    # Iteratively select points
+    # Iteratively select points. Only performs ALC for now.
     for i in range(start, end):
         # Point selection logic based on method
-        if method == Method.ALCRAY:
+        if method == Method.ALCRAY: #TODO: add funx if needed. placeholder for now
             offset = (i - start + 1) % int(np.sqrt(i - start + 1))
             w = alcray_selection(gp, Xcand, Xref, offset, numstart, rect, verb)
         elif method == Method.ALC:
             scores = alc(gp, Xcand, Xref, verb) #no gpu support for now
             w = np.argmax(scores)
-        elif method == Method.MSPE:
+        elif method == Method.MSPE: #TODO: add funx if needed. placeholder for now
             scores = mspe(gp, Xcand, Xref, verb)
             w = np.argmin(scores)
         else:  # Method.NN
@@ -250,11 +250,22 @@ def _laGP(Xref: np.ndarray,
         
         # Re-estimate parameters periodically if requested TODO: do we need this?
         # if param_est and (i - start + 1) % est_freq == 0:
-        #     mle_result = joint_mle_gp(gp, d_range, g_range, verb=verb-1)
-        #     if verb > 0:
-        #         print(f"Update {i}: lengthscale={mle_result.lengthscale:.6f}, "
-        #               f"nugget={mle_result.nugget:.6f}")
-        
+        #     if get_value(d, 'mle') and get_value(g, 'mle'):
+        #         if gp.dK is None:
+        #             gp.new_dK()
+        #         gp.jmle(drange = (get_value(d, 'min'), get_value(d, 'max')), 
+        #                 grange = (get_value(g, 'min'), get_value(g, 'max')), 
+        #                 dab = get_value(d, 'ab'), 
+        #                 gab = get_value(g, 'ab'), 
+        #                 verb = verb)
+        #     elif get_value(d, 'mle'):
+        #         if gp.dK is None:
+        #             gp.new_dK()
+        #         gp.mle('lengthscale', get_value(d, 'min'), get_value(d, 'max'), 
+        #             get_value(d, 'ab'), verb)
+        #     elif get_value(g, 'mle'):
+        #         gp.mle('nugget', get_value(g, 'min'), get_value(g, 'max'), 
+        #             get_value(g, 'ab'), verb)
 
         # Update candidate set
         if w != len(cand_idx) - 1:
@@ -271,19 +282,25 @@ def _laGP(Xref: np.ndarray,
             cand_idx = cand_idx[:-1]
             Xcand = Xcand[:-1]
     
-    # Possibly do MLE calculation
-    if d is not None and g is not None:
+    # If required MLE calculation to obtain posterior parameters and update gp before prediction
+    if get_value(d, 'mle') and get_value(g, 'mle'):
         if gp.dK is None:
             gp.new_dK()
-        gp.jmle((1e-6, 1.0), (1e-6, 1.0), (0.0, 0.0), (0.0, 0.0), verb)
-    elif d is not None:
+        gp.jmle(drange = (get_value(d, 'min'), get_value(d, 'max')), 
+                grange = (get_value(g, 'min'), get_value(g, 'max')), 
+                dab = get_value(d, 'ab'), 
+                gab = get_value(g, 'ab'), 
+                verb = verb)
+    elif get_value(d, 'mle'):
         if gp.dK is None:
             gp.new_dK()
-        gp.mle('lengthscale', 1e-6, 1.0, (0.0, 0.0), verb)
-    elif g is not None:
-        gp.mle('nugget', 1e-6, 1.0, (0.0, 0.0), verb)
+        gp.mle('lengthscale', get_value(d, 'min'), get_value(d, 'max'), 
+               get_value(d, 'ab'), verb)
+    elif get_value(g, 'mle'):
+        gp.mle('nugget', get_value(g, 'min'), get_value(g, 'max'), 
+               get_value(g, 'ab'), verb)
 
-    # Now predict
+    # Given the updated gp, predict values and return results
     if lite:
         mean_pred, s2_pred, df, llik = gp.predict_lite(Xref)
     else:

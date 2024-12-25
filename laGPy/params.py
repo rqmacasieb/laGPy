@@ -229,11 +229,23 @@ def darg(d: Optional[Union[float, Dict]] = None,
     
     return d
 
-def get_start_value(param):
-    """Helper function to get the start value from a parameter."""
+def get_value(param, key_or_index):
+    """
+    Retrieve a value from a parameter that can be either a dictionary or a list.
+    
+    Args:
+        param: The parameter, which can be a dictionary or a list.
+        key_or_index: The key (if param is a dictionary) or index (if param is a list).
+        
+    Returns:
+        The value corresponding to the key or index.
+        
+    Raises:
+        ValueError: If the parameter is not a dictionary or a list.
+    """
     if isinstance(param, dict):
-        return param['start']
-    elif isinstance(param, list) or isinstance(param, np.ndarray):
-        return param[0]
+        return param.get(key_or_index)
+    elif isinstance(param, (list, tuple)):
+        return param[key_or_index]
     else:
-        raise ValueError("Parameter must be a dictionary or a list/array.")
+        raise ValueError("Parameter must be a dictionary or a list/tuple.")
