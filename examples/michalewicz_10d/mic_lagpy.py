@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from laGPy import laGP
+import laGPy
 
 
 # import training dataset
@@ -12,7 +12,7 @@ y = y['func'].values
 X_dv = pd.read_csv('dv.dat', header = 0).values.transpose() #1 x n_dv
 
 # Create and fit LaGP model
-sims = laGP(
+sims = laGPy.laGP(
     Xref=X_dv,             # Reference points
     start=6,               # Initial points
     end=20,                # Total points to select

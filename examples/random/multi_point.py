@@ -1,5 +1,5 @@
 import numpy as np
-from laGPy import laGP
+import laGPy
 
 
 #TODO: this is not working and not needed for now. Will be fixed later as needed.
@@ -10,7 +10,7 @@ Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100)
 Xref = np.random.rand(5, 10)
 
 # Create and fit LaGP model
-sims = laGP(
+sims = laGPy.laGP(
     Xref=Xref,             # Reference points
     start=10,               # Initial points
     end=30,                # Total points to select
