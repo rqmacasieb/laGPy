@@ -1,6 +1,13 @@
 import numpy as np
-from laGPy.laGPy import LaGP
 import pandas as pd
+import sys
+
+#import laGPy from the current release version
+# from laGPy import LaGP
+
+#import laGPy from the local development directory
+sys.path.append('../..')
+from laGPy.laGPy import LaGP
 
 # import training dataset
 X = pd.read_csv('mic.dv_pop.csv', header = 0).drop(columns=['real_name']).values #n_tr x n_dv
@@ -17,7 +24,7 @@ mean, var = model.fit_predict(
     start=6,
     end=20,
     length_scale=0.1,
-    nugget=1e-6,
+    nugget=1e-4,
     n_close=40
 )
 

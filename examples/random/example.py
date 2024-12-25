@@ -1,5 +1,5 @@
 import numpy as np
-from laGPy.laGPy import LaGP
+from laGPy import LaGP
 
 # Generate example data
 np.random.seed(42)
