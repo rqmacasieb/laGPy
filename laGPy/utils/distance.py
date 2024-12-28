@@ -1,7 +1,7 @@
 from typing import Optional, Union
 import numpy as np
 
-def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
+def distance(X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
     """
     Calculate the distance matrix between the rows of X1 and X2,
     or between X1 and itself when X2 is None.
@@ -16,60 +16,37 @@ def distance(X1: np.ndarray, X2: Optional[np.ndarray] = None) -> np.ndarray:
     Raises:
         ValueError: If input dimensions don't match
     """
-    # Coerce arguments and extract dimensions
-    X1 = np.asarray(X1)
     if X1.ndim == 1:
-        X1 = X1.reshape(-1, 1)
-    n1, m = X1.shape
-    
-    if X2 is None:
-        # Calculate symmetric distance matrix
-        D = np.zeros((n1, n1))
-        
-        # Compute squared Euclidean distances
-        for i in range(m):
-            # Broadcasting to compute differences
-            diff = X1[:, i:i+1] - X1[:, i:i+1].T
-            D += diff * diff
+        X1 = X1.reshape(1, -1)
+    if X2.ndim == 1:
+        X2 = X2.reshape(1, -1)
 
-        return D
-        
-    else:
-        # Coerce X2 and check dimensions
-        X2 = np.asarray(X2)
-        if X2.ndim == 1:
-            X2 = X2.reshape(-1, 1)
-        n2, m2 = X2.shape
-        
-        if m != m2:
-            raise ValueError("Column dimension mismatch between X1 and X2")
-            
-        # Calculate distance matrix
-        D = np.zeros((n1, n2))
-        
-        # Compute squared Euclidean distances
-        for i in range(m):
-            # Broadcasting to compute differences
-            diff = X1[:, i:i+1] - X2[:, i:i+1].T
-            D += diff * diff
-            
-        # Take square root for Euclidean distance
-        # TODO: check if we need to take the square root
-        # np.sqrt(D, out=D)
-        return D
+    # Coerce arguments and extract dimensions
+    X1_norm = np.sum(X1**2, axis=1)[:, np.newaxis]
+    X2_norm = np.sum(X2**2, axis=1)
+    
+    # Use matrix multiplication for efficient computation
+    cross_term = -2 * np.dot(X1, X2.T)
+    
+    # Combine terms using broadcasting
+    D = X1_norm + X2_norm + cross_term
+    
+    # Ensure non-negative distances due to numerical precision
+    D = np.maximum(D, 0)
+    return D
 
-def distance_symm(X: np.ndarray) -> np.ndarray:
-    """
-    Optimized symmetric distance calculation.
-    Used internally when X2 is None.
+# def distance_symm(X: np.ndarray) -> np.ndarray:
+#     """
+#     Optimized symmetric distance calculation.
+#     Used internally when X2 is None.
     
-    Args:
-        X: Input matrix (n × m)
+#     Args:
+#         X: Input matrix (n × m)
     
-    Returns:
-        Symmetric distance matrix (n × n)
-    """
-    return distance(X)
+#     Returns:
+#         Symmetric distance matrix (n × n)
+#     """
+#     return distance(X)
 
 def distance_asymm(X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
     """

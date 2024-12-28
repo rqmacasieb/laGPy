@@ -8,3 +8,5 @@ build/
 
 # Ignore validation run files
 validation/
+/laGPy/__pycache__
+/__pycache__

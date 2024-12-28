@@ -351,10 +351,10 @@ def alc(gp, Xcand, Xref, verb=0):
     nref = Xref.shape[0]
     
     # Allocate vectors
-    gvec = np.zeros(n)
-    kxy = np.zeros(nref)
-    kx = np.zeros(n)
-    ktKikx = np.zeros(nref)
+    # gvec = np.zeros(n)
+    # kxy = np.zeros(nref)
+    # kx = np.zeros(n)
+    # ktKikx = np.zeros(nref)
     
     # k <- covar(X1=X, X2=Xref, d=Zt$d, g=0)
     k = covar(Xref, gp.X, gp.d)
@@ -368,7 +368,7 @@ def alc(gp, Xcand, Xref, verb=0):
             print(f"alc: calculating ALC for point {i+1} of {ncand}")
         
         # Calculate the g vector, mui, and kxy
-        mui, gvec, kx, kxy = calc_g_mui_kxy(m, Xcand[i], gp.X, gp.X.shape[0], gp.Ki, Xref, Xref.shape[0], gp.d, gp.g)
+        mui, gvec, kxy = calc_g_mui_kxy(m, Xcand[i], gp.X, gp.X.shape[0], gp.Ki, Xref, Xref.shape[0], gp.d, gp.g)
         
         # Skip if numerical problems
         if mui <= np.finfo(float).eps:
