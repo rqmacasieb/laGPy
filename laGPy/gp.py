@@ -54,14 +54,14 @@ class GP:
             L = np.linalg.cholesky(self.K)
             
             # Update inverse
-            self.Ki = np.linalg.inv(self.K)
+            self.Ki = np.linalg.inv(L) @ np.linalg.inv(L).T
             
             # Update log determinant
             self.ldetK = 2 * np.sum(np.log(np.diag(L)))
             
             # Update KiZ if Z exists
             if self.Z is not None:
-                self.KiZ = self.Ki @ self.Z
+                self.KiZ = np.linalg.solve(self.K, self.Z)
                 self.phi = self.Z @ self.KiZ
                 
         except np.linalg.LinAlgError:

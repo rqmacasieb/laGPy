@@ -31,7 +31,8 @@ def covar_symm(X: np.ndarray, d: float, g: float) -> np.ndarray:
         Symmetric covariance matrix
     """
     K = covar(X, X, d)
-    np.fill_diagonal(K, 1.0 + g)
+    # np.fill_diagonal(K, 1.0 + g)
+    K.flat[::K.shape[0] + 1] += g
     return K
 
 def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
@@ -50,26 +51,24 @@ def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
         g: Nugget parameter
         
     Returns:
-        Tuple of (mui, gvec, kx, kxy)
+        Tuple of (mui, gvec, kxy)
     """
     # Calculate kx: covariance between x and each point in X
-    kx = covar(X, x.reshape(1, -1), d).flatten()
+    kx = covar(X, x, d).ravel()
     
     # Calculate kxy: covariance between x and each point in Xref
-    kxy = None
-    if nref > 0:
-        kxy = covar(x.reshape(1, -1), Xref, d).flatten()
+    kxy = covar(x, Xref, d).ravel() if nref > 0 else None
 
     # Calculate gvec: Ki * kx
     gvec = Ki @ kx
     
     # Calculate mui: 1 + g - kx' * gvec
-    mui = 1.0 + g - np.dot(kx, gvec)
+    mui = 1.0 + g - kx @ gvec
     
     # Calculate gvec: - Kikx/mui
     gvec *= -1.0 / mui
 
-    return mui, gvec, kx, kxy
+    return mui, gvec, kxy
 
 def diff_covar_symm(X: np.ndarray, d: float) -> Tuple[np.ndarray, np.ndarray]:
     """
