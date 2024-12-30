@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Optional, Tuple
+from typing import Tuple
 from .utils.distance import distance
 
 def covar(X1: np.ndarray, X2: np.ndarray, d: float) -> np.ndarray:
@@ -15,7 +15,9 @@ def covar(X1: np.ndarray, X2: np.ndarray, d: float) -> np.ndarray:
         Covariance matrix
     """
     D = distance(X1, X2)
-    K = np.exp(-D / d)
+    #using isotrophic Gaussian by default
+    #TODO: perhaps add an option to use other kernel functions if needed
+    K = np.exp(-D / d) 
     return K
 
 def covar_symm(X: np.ndarray, d: float, g: float) -> np.ndarray:

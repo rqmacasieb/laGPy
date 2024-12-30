@@ -1,16 +1,12 @@
 import numpy as np
-from scipy.optimize import minimize
-from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple, List, Dict, NamedTuple
+from typing import Optional, Tuple, Dict
 from .gp import *
 from .matrix import get_data_rect
-from .order import order
-# from .covar_sep import *
 from .covar import *
 from .params import *
 import time
-from .utils.distance import distance_asymm
+from .utils.distance import *
 
 class Method(Enum):
     ALC = 1
@@ -19,48 +15,6 @@ class Method(Enum):
     MSPE = 4
     EFI = 5
     NN = 6
-
-def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
-                   close: int, sorted: bool = False) -> np.ndarray:
-    """
-    Returns the close indices into X which are closest to Xref.
-    
-    Args:
-        start: Number of initial points
-        Xref: Reference points
-        n: Number of total points
-        X: Input points
-        close: Number of close points to find
-        sorted: Whether to sort the indices
-        
-    Returns:
-        Array of indices of closest points
-    """
-    # Ensure Xref is 2D
-    if len(Xref.shape) == 1:
-        Xref = Xref.reshape(1, -1)
-
-    # Calculate distances to reference location(s)
-    D = distance_asymm(X, Xref)
-    # D = np.zeros(n)
-    # for i in range(Xref.shape[1]):
-    #     diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
-    #     D += np.min(diff**2, axis=0)  # Take minimum across reference points
-
-    # Get indices of closest points
-    if n > close:
-        idx = np.argsort(D)[:close]
-    else:
-        idx = np.arange(n)
-        
-    # Sort by distance if requested
-    if sorted:
-        idx = idx[np.argsort(D[idx].reshape(-1))]
-    elif start < close:
-        # Partially sort to get start closest
-        idx = np.argpartition(D[idx].reshape(-1), start)
-        
-    return idx
 
 def _laGP(Xref: np.ndarray, 
          start: int, 
@@ -331,6 +285,7 @@ def laGP(Xref: np.ndarray,
     
     return result
 
+
 def alc(gp, Xcand, Xref, verb=0):
     """
     CPU implementation of ALC criterion.
@@ -370,7 +325,7 @@ def alc(gp, Xcand, Xref, verb=0):
         # Calculate the g vector, mui, and kxy
         mui, gvec, kxy = calc_g_mui_kxy(m, Xcand[i], gp.X, gp.X.shape[0], gp.Ki, Xref, Xref.shape[0], gp.d, gp.g)
         
-        # Skip if numerical problems
+        # Skip if too small value to avoid numerical problems
         if mui <= np.finfo(float).eps:
             alc_scores[i] = -np.inf
             continue

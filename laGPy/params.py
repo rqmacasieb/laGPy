@@ -1,4 +1,4 @@
-from typing import Optional, Union, Dict, List
+from typing import Optional, Union, Dict
 import numpy as np
 from scipy.special import gamma as sp_gamma, gammaln as sp_gammaln, gammaincinv as sp_gammaincinv
 from laGPy.gamma import Rgamma_inv as lgp_Rgamma_inv, Cgamma as lgp_Cgamma, Igamma_inv as lgp_Igamma_inv

@@ -1,10 +1,13 @@
 import numpy as np
+import pickle
+import os
 from scipy.stats import gamma
 from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Union 
 from .matrix import *
 from .covar import *
+from .params import *
 
 @dataclass
 class OptInfo:
@@ -710,3 +713,79 @@ def alcray_selection(gp: GP, Xcand: np.ndarray, Xref: np.ndarray,
     # Implementation of ALCRAY selection
     pass
 
+def buildGP(X: np.ndarray, 
+         Z: np.ndarray, 
+         d: Optional[Union[float, Tuple[float, float]]] = None,
+         g: float = 1/10000,
+         wdir: str = '.',
+         fname: str = 'GPRmodel.gp',
+         verb: int = 0) -> GP:
+    """
+    Builds GP for Local Approximate Gaussian Process Regression
+    
+    Args:
+        X: Training inputs (n × m)
+        Z: Training outputs (n,)
+        d: Lengthscale parameter or tuple of (start, mle)
+        g: Nugget parameter
+        wdir: Directory to save the GP model
+        fname: Name of the GP model file
+        verb: Verbosity level
+        
+    Returns:
+        Pickle (.gp)file containing GP model with the following attributes:
+            m: Number of dimensions
+            n: Number of data points
+            Ki: Inverse of the covariance matrix
+            d: Lengthscale parameter
+            g: Nugget parameter
+            phi: Precision parameter
+            X: Design matrix
+    """
+    d_prior = darg(d, X)
+    g_prior = garg(g, Z)
+    
+    gp = new_gp(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
+    optimize_parameters(gp, d_prior, g_prior, verb)
+
+    #save GP model to file that can be readily imported
+    with open(fname, 'wb') as file:
+        pickle.dump(gp, file)
+
+    if verb > 0:
+        print(f"GP model saved to {fname}")
+
+
+def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
+    """Load GP model from a specified .gp file or the first .gp file found in the directory.
+    
+    Args:
+        wdir: Directory to search for .gp files
+        fname: Specific .gp file to load (if None, the first .gp file found in the directory is loaded)
+    Returns:
+        GP model
+    """
+
+    if fname:
+        # If a filename is provided, construct the full path
+        full_path = os.path.join(wdir, fname)
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError(f"The specified file '{fname}' does not exist in the directory.")
+    else:
+        # List all files in the specified directory
+        files = os.listdir(wdir)
+        
+        # Filter for files with a .gp extension
+        gp_files = [f for f in files if f.endswith('.gp')]
+        
+        if not gp_files:
+            raise FileNotFoundError("No .gp file found in the directory.")
+        
+        if len(gp_files) > 1:
+            raise ValueError("Multiple .gp files found. Please specify a specific filename.")
+        
+        # Use the first .gp file found
+        full_path = os.path.join(wdir, gp_files[0])
+    
+    with open(full_path, 'rb') as file:
+        return pickle.load(file)

@@ -23,7 +23,13 @@ from .params import (
 # Import from utils.distance
 from .utils.distance import (
     distance,
-    distance_asymm
+    distance_asymm,
+    closest_indices
+)
+
+from .gp import (
+    buildGP,
+    loadGP
 )
 
 from . import _version
@@ -44,6 +50,8 @@ __version__ = _version.get_versions()['version']
 
 __all__ = [
     'laGP',
+    'buildGP',
+    'loadGP',
     # 'Method',
     # 'MLEResult',
     # 'GP',

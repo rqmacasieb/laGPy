@@ -8,13 +8,13 @@ y = pd.read_csv('mic.obs_pop.csv', header= 0).drop(columns=['real_name']) #n_tr 
 y = y['func'].values
 
 #read dv values
-X_dv = pd.read_csv('dv.dat', header = 0).values.transpose() #1 x n_dv
+X_dv = pd.read_csv('dv_untried.dat', header = 0).values.transpose() #1 x n_dv
 
 # Create and fit LaGP model
 sims = laGPy.laGP(
     Xref=X_dv,             # Reference points
     start=6,               # Initial points
-    end=20,                # Total points to select
+    end=100,                # Total points to select
     X=X,                   # Input points
     Z=y,                   # Output value
     verb=1                # Show optimization progress
