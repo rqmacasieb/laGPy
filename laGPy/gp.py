@@ -739,7 +739,8 @@ def buildGP(X: np.ndarray,
          fname: str = 'GPRmodel.gp',
          verb: int = 0) -> GP:
     """
-    Builds GP for Gaussian Process Regression. Uses all the training data to build the model.
+    Builds GP for Gaussian Process Regression. 
+    Uses all the training data to build the model (i.e., not a local approximate GP!).
     
     Args:
         X: Training inputs (n × m)

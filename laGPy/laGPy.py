@@ -16,11 +16,59 @@ class Method(Enum):
     EFI = 5
     NN = 6
 
+
+def fullGP(Xref: np.ndarray, 
+        X: np.ndarray, 
+        Z: np.ndarray, 
+        d: Optional[Union[float, Tuple[float, float]]] = None,
+        g: float = 1/10000,
+        lite: bool = True,
+        verb: int = 0) -> Dict:
+    """
+    GP prediction utilizing full training dataset
+
+    Args:
+        Xref: Reference points for prediction
+        X: Training inputs
+        Z: Training outputs
+        d: Lengthscale parameter
+        g: Nugget parameter
+        lite: Whether to use lite version (only diagonal of covariance)
+        verb: Verbosity level
+        
+    Returns:
+        Dictionary with the following keys:
+            mean: Predicted means
+            var: Predicted variances
+            df: Degrees of freedom
+            llik: Log likelihood
+            d_posterior: Posterior lengthscale parameter
+            g_posterior: Posterior nugget parameter
+    """
+
+    gp = buildGP(X, Z, d, g, verb)
+    optimize_parameters(gp, d, g, verb)
+
+    if lite:
+        results = gp.predict_lite(Xref)
+    else:
+        results = gp.predict(Xref)
+
+    return {
+        "mean": results["mean"],
+        "s2": results["var"],
+        "df": results["df"],
+        "llik": results["llik"],
+        "d_posterior": gp.d,
+        "g_posterior": gp.g,
+    }
+
+
 def _laGP(Xref: np.ndarray, 
-         start: int, 
-         end: int, 
          X: np.ndarray, 
          Z: np.ndarray, 
+         start: Optional[int] = None, 
+         end: Optional[int] = None, 
          d: Optional[Union[float, Tuple[float, float]]] = None,
          g: float = 1/10000,
          method: Method = Method.ALC,  # Use Method enum
@@ -143,10 +191,10 @@ def _laGP(Xref: np.ndarray,
     }
 
 def laGP(Xref: np.ndarray, 
-         start: int, 
-         end: int, 
          X: np.ndarray, 
          Z: np.ndarray, 
+         start: Optional[int] = None, 
+         end: Optional[int] = None, 
          d: Optional[Union[float, Tuple[float, float]]] = None,
          g: float = 1/10000,
          method: Union[str, Method] = "alc",
@@ -161,10 +209,10 @@ def laGP(Xref: np.ndarray,
     
     Args:
         Xref: Reference points for prediction (n_ref × m)
-        start: Initial design size (must be >= 6)
-        end: Final design size
         X: Training inputs (n × m)
         Z: Training outputs (n,)
+        start: Initial design size (must be >= 6; if None, full training design is used)
+        end: Final design size (if None, full training design is used)
         d: Lengthscale parameter or tuple of (start, mle)
         g: Nugget parameter
         method: One of "alc", "alcopt", "alcray", "mspe", "nn", "fish"
@@ -216,6 +264,13 @@ def laGP(Xref: np.ndarray,
     # Input validation
     if start < 6 or end <= start:
         raise ValueError("must have 6 <= start < end")
+    if start is None:
+        if end is None:
+            print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
+        else:
+            raise ValueError("start must be provided ( <= start < end) if end is provided")
+    if end == n:
+        print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
     if Xref.shape[1] != m:
         raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
     if len(Z) != n:
@@ -241,47 +296,56 @@ def laGP(Xref: np.ndarray,
     d_prior = darg(d, X)
     g_prior = garg(g, Z)
     
-    # Initialize output arrays
-    mean = np.zeros(nref)
-    s2dim = nref if lite else nref * nref
-    s2 = np.zeros(s2dim)
-    
     # Start timing
     tic = time.time()
     
     # Call core implementation
-    results = _laGP(Xref=Xref,
-        start=start, end=end, X=X, Z=Z,        
-        d=d_prior, g=g_prior,
-        method=Method(imethod),
-        close=close,
-        numstart=numstart,
-        rect=rect,
-        verb=verb,
-        lite=lite
-    )
+    if start is not None and end is not None and end < n:
+        results = _laGP(Xref=Xref,
+            X=X, Z=Z, start=start, end=end,        
+            d=d_prior, g=g_prior,
+            method=Method(imethod),
+            close=close,
+            numstart=numstart,
+            rect=rect,
+            verb=verb,
+            lite=lite
+        )
+
+        result = {
+            'mean': results['mean'],
+            's2': results['s2'],
+            'selected': results['selected'],
+            'df': results['df'],
+            'llik': results['llik'],
+            'time': time.time() - tic,
+            'method': method,
+            'd': results['d_posterior'],
+            'g': results['g_posterior'],
+            'close': close
+        }
     
-    # Assemble results
-    result = {
-        'mean': results['mean'],
-        's2': results['s2'],
-        'selected': results['selected'],
-        'df': results['df'],
-        'llik': results['llik'],
-        'time': time.time() - tic,
-        'method': method,
-        'd': results['d_posterior'],
-        'g': results['g_posterior'],
-        'close': close
-    }
+    elif (start is None and end is None) or end == n: #full GP implementation
+        results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
+        result = {
+            'mean': results['mean'],
+            's2': results['s2'],
+            'df': results['df'],
+            'llik': results['llik'],
+            'time': time.time() - tic,
+            'd': results['d_posterior'],
+            'g': results['g_posterior'],
+        }
+    else:
+        raise ValueError("start and end must be provided if start is not None")
     
     # Add s2/Sigma
     if not lite:
         result['Sigma'] = results['s2'].reshape(nref, nref)
     
     # Add ray info if needed
-    if method in ["alcray", "alcopt"]:
-        result['numstart'] = numstart
+    # if method in ["alcray", "alcopt"]:
+    #     result['numstart'] = numstart
     
     return result
 
