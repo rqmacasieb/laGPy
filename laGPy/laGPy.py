@@ -28,7 +28,7 @@ def _laGP(Xref: np.ndarray,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
-         verb: int = 0) -> Tuple[float, float, float, float, float]:
+         verb: int = 0) -> Dict:
     """
     Local Approximate GP prediction with parameter estimation
     
@@ -128,15 +128,15 @@ def _laGP(Xref: np.ndarray,
     
     # Given the updated gp, predict values and return results
     if lite:
-        mean_pred, s2_pred, df, llik = gp.predict_lite(Xref)
+        results = gp.predict_lite(Xref)
     else:
-        mean_pred, s2_pred, df, llik = gp.predict(Xref)
+        results = gp.predict(Xref)
     
     return {
-        "mean": mean_pred,
-        "s2": s2_pred,
-        "df": df,
-        "llik": llik,
+        "mean": results["mean"],
+        "s2": results["var"],
+        "df": results["df"],
+        "llik": results["llik"],
         "selected": selected,
         "d_posterior": gp.d,
         "g_posterior": gp.g,

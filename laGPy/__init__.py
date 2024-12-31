@@ -49,9 +49,7 @@ __version__ = _version.get_versions()['version']
 
 
 __all__ = [
-    'laGP',
-    'buildGP',
-    'loadGP',
+    'laGP'
     # 'Method',
     # 'MLEResult',
     # 'GP',

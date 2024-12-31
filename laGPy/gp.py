@@ -502,7 +502,7 @@ class GP:
         if verb > 0:
             print(f"Updated GP with new point(s). New n = {self.n}")
 
-    def predict_lite(self, Xref: np.ndarray, nonug: bool = False) -> Tuple[np.ndarray, np.ndarray, float, float]:
+    def predict_lite(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
         """
         Lightweight prediction at reference points (diagonal covariance only)
         
@@ -511,7 +511,11 @@ class GP:
             nonug: If True, use minimal nugget instead of GP nugget
             
         Returns:
-            Tuple of (mean, var, df, llik)
+            Dictionary with the following keys:
+                "mean": Mean predictions
+                "var": Variance predictions
+                "df": Degrees of freedom
+                "llik": Log likelihood
         """
         # Set nugget
         g = np.sqrt(np.finfo(float).eps) if nonug else self.g
@@ -530,9 +534,14 @@ class GP:
         # Calculate log likelihood
         llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
         
-        return mean, var, df, llik
+        return {
+            "mean": mean,
+            "var": var,
+            "df": df,
+            "llik": llik
+        }
 
-    def predict(self, Xref: np.ndarray, nonug: bool = False) -> Tuple[np.ndarray, np.ndarray, float, float]:
+    def predict(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
         """
         Full prediction at reference points (full covariance matrix)
         
@@ -541,7 +550,11 @@ class GP:
             nonug: If True, use minimal nugget instead of GP nugget
             
         Returns:
-            Tuple of (mean, Sigma, df, llik)
+            Dictionary with the following keys:
+                "mean": Mean predictions
+                "Sigma": Covariance predictions
+                "df": Degrees of freedom
+                "llik": Log likelihood
         """
         nn = len(Xref)
     
@@ -563,7 +576,12 @@ class GP:
         # Calculate log likelihood
         llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
         
-        return mean, Sigma, df, llik
+        return {
+            "mean": mean,
+            "Sigma": Sigma,
+            "df": df,
+            "llik": llik
+        }
     
     def pred_generic(self, n: int, phidf: float, Z: np.ndarray, Ki: np.ndarray, 
                 nn: int, k: np.ndarray, mean: np.ndarray, Sigma: np.ndarray) -> None:
@@ -721,7 +739,7 @@ def buildGP(X: np.ndarray,
          fname: str = 'GPRmodel.gp',
          verb: int = 0) -> GP:
     """
-    Builds GP for Local Approximate Gaussian Process Regression
+    Builds GP for Gaussian Process Regression. Uses all the training data to build the model.
     
     Args:
         X: Training inputs (n × m)
@@ -733,7 +751,7 @@ def buildGP(X: np.ndarray,
         verb: Verbosity level
         
     Returns:
-        Pickle (.gp)file containing GP model with the following attributes:
+        Pickle (.gp) file containing GP model with the following attributes:
             m: Number of dimensions
             n: Number of data points
             Ki: Inverse of the covariance matrix
@@ -754,6 +772,8 @@ def buildGP(X: np.ndarray,
 
     if verb > 0:
         print(f"GP model saved to {fname}")
+
+    return gp
 
 
 def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
