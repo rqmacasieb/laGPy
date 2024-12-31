@@ -14,7 +14,7 @@ X_dv = pd.read_csv('dv_untried.dat', header = 0).values.transpose() #1 x n_dv
 sims = laGPy.laGP(
     Xref=X_dv,             # Reference points
     start=6,               # Initial points
-    end=40,                # Total points to select
+    end=100,                # Total points to select
     X=X,                   # Input points
     Z=y,                   # Output value
     verb=1                # Show optimization progress
@@ -23,7 +23,6 @@ sims = laGPy.laGP(
 print(f"Final parameters: lengthscale={sims['d']:.6f}, nugget={sims['g']:.6f}")
 print("Predictions:", sims['mean'])
 print("Variances:", sims['s2'])
-print("Selected indices:", sims['selected'])
 
 # Save the prediction results to a file
 with open('output.dat', 'w') as f:

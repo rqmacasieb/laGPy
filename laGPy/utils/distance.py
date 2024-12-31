@@ -99,3 +99,45 @@ def distance_asymm(X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
 #     # Ensure non-negative due to floating point errors
 #     sq_dists = np.maximum(sq_dists, 0)
 #     return np.sqrt(sq_dists)
+
+def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray, 
+                   close: int, sorted: bool = False) -> np.ndarray:
+    """
+    Returns the close indices into X which are closest to Xref.
+    
+    Args:
+        start: Number of initial points
+        Xref: Reference points
+        n: Number of total points
+        X: Input points
+        close: Number of close points to find
+        sorted: Whether to sort the indices
+        
+    Returns:
+        Array of indices of closest points
+    """
+    # Ensure Xref is 2D
+    if len(Xref.shape) == 1:
+        Xref = Xref.reshape(1, -1)
+
+    # Calculate distances to reference location(s)
+    D = distance_asymm(X, Xref)
+    # D = np.zeros(n)
+    # for i in range(Xref.shape[1]):
+    #     diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
+    #     D += np.min(diff**2, axis=0)  # Take minimum across reference points
+
+    # Get indices of closest points
+    if n > close:
+        idx = np.argsort(D)[:close]
+    else:
+        idx = np.arange(n)
+        
+    # Sort by distance if requested
+    if sorted:
+        idx = idx[np.argsort(D[idx].reshape(-1))]
+    elif start < close:
+        # Partially sort to get start closest
+        idx = np.argpartition(D[idx].reshape(-1), start)
+        
+    return idx
