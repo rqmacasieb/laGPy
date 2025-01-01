@@ -769,7 +769,8 @@ def buildGP(X: np.ndarray,
     optimize_parameters(gp, d_prior, g_prior, verb)
 
     #save GP model to file that can be readily imported
-    with open(fname, 'wb') as file:
+    full_path = os.path.join(wdir, fname)
+    with open(full_path, 'wb') as file:
         pickle.dump(gp, file)
 
     if verb > 0:
