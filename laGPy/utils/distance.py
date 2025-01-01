@@ -72,10 +72,6 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
 
     # Calculate distances to reference location(s)
     D = distance_asymm(X, Xref)
-    # D = np.zeros(n)
-    # for i in range(Xref.shape[1]):
-    #     diff = Xref[:, i:i+1] - X[:, i].reshape(1, -1)
-    #     D += np.min(diff**2, axis=0)  # Take minimum across reference points
 
     # Get indices of closest points
     if n > close:
