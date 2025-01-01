@@ -514,7 +514,7 @@ class GP:
         Returns:
             Dictionary with the following keys:
                 "mean": Mean predictions
-                "var": Variance predictions
+                "s2": Variance predictions
                 "df": Degrees of freedom
                 "llik": Log likelihood
         """
@@ -537,7 +537,7 @@ class GP:
         
         return {
             "mean": mean,
-            "var": var,
+            "s2": var,
             "df": df,
             "llik": llik
         }
@@ -738,6 +738,7 @@ def buildGP(X: np.ndarray,
          g: float = 1/10000,
          wdir: str = '.',
          fname: str = 'GPRmodel.gp',
+         export: bool = True,
          verb: int = 0) -> GP:
     """
     Builds GP for Gaussian Process Regression. 
@@ -750,6 +751,7 @@ def buildGP(X: np.ndarray,
         g: Nugget parameter
         wdir: Directory to save the GP model
         fname: Name of the GP model file
+        export: Whether to export the GP model to a file
         verb: Verbosity level
         
     Returns:
@@ -762,19 +764,20 @@ def buildGP(X: np.ndarray,
             phi: Precision parameter
             X: Design matrix
     """
-    d_prior = darg(d, X)
-    g_prior = garg(g, Z)
+    d_prior = darg(d, X) if d is None else d
+    g_prior = garg(g, Z) if g is None else g
     
     gp = new_gp(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
     optimize_parameters(gp, d_prior, g_prior, verb)
 
-    #save GP model to file that can be readily imported
-    full_path = os.path.join(wdir, fname)
-    with open(full_path, 'wb') as file:
-        pickle.dump(gp, file)
+    #if required, save GP model to file that can be readily imported
+    if export:
+        full_path = os.path.join(wdir, fname)
+        with open(full_path, 'wb') as file:
+            pickle.dump(gp, file)
 
-    if verb > 0:
-        print(f"GP model saved to {fname}")
+        if verb > 0:
+            print(f"GP model saved to {fname}")
 
     return gp
 

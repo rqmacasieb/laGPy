@@ -46,8 +46,7 @@ def fullGP(Xref: np.ndarray,
             g_posterior: Posterior nugget parameter
     """
 
-    gp = buildGP(X, Z, d, g, verb)
-    optimize_parameters(gp, d, g, verb)
+    gp = buildGP(X, Z, d, g, export=False, verb=verb)
 
     if lite:
         results = gp.predict_lite(Xref)
@@ -56,7 +55,7 @@ def fullGP(Xref: np.ndarray,
 
     return {
         "mean": results["mean"],
-        "s2": results["var"],
+        "s2": results["s2"],
         "df": results["df"],
         "llik": results["llik"],
         "d_posterior": gp.d,
@@ -182,7 +181,7 @@ def _laGP(Xref: np.ndarray,
     
     return {
         "mean": results["mean"],
-        "s2": results["var"],
+        "s2": results["s2"],
         "df": results["df"],
         "llik": results["llik"],
         "selected": selected,
@@ -262,15 +261,19 @@ def laGP(Xref: np.ndarray,
     nref = Xref.shape[0]
     
     # Input validation
-    if start < 6 or end <= start:
-        raise ValueError("must have 6 <= start < end")
-    if start is None:
+    if start is None and end is not None:
+        raise ValueError("start must be provided ( <= start < end) if end is provided")
+    if start is not None:
+        if start < 6 or end <= start:
+            raise ValueError("must have 6 <= start < end")
         if end is None:
-            print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
-        else:
-            raise ValueError("start must be provided ( <= start < end) if end is provided")
-    if end == n:
-        print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
+            print("WARNING: Target design size is not provided. Using full training design for GP (i.e., NOT a local approximate GP!)")
+        elif end > n:
+            print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
+                  f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            end = n
+        elif end == n:
+            print(f"WARNING: Target design size = {end} is equal to training design size = {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
     if Xref.shape[1] != m:
         raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
     if len(Z) != n:
@@ -325,7 +328,7 @@ def laGP(Xref: np.ndarray,
             'close': close
         }
     
-    elif (start is None and end is None) or end == n: #full GP implementation
+    elif (start is None and end is None) or end >= n: #full GP implementation
         results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
         result = {
             'mean': results['mean'],
