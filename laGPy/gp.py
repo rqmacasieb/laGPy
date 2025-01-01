@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import os
 from scipy.stats import gamma
+from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union 
@@ -54,17 +55,17 @@ class GP:
         
         try:
             # Calculate Cholesky decomposition
-            L = np.linalg.cholesky(self.K)
+            L = cho_factor(self.K)
+        
+            # inverse calculation
+            self.Ki = cho_solve(L, np.eye(self.K.shape[0]))
             
-            # Update inverse
-            self.Ki = np.linalg.inv(L) @ np.linalg.inv(L).T
+            # log determinant calculation
+            self.ldetK = 2 * np.sum(np.log(np.diag(L[0])))
             
-            # Update log determinant
-            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
-            
-            # Update KiZ if Z exists
             if self.Z is not None:
-                self.KiZ = np.linalg.solve(self.K, self.Z)
+                # More efficient solve
+                self.KiZ = cho_solve(L, self.Z)
                 self.phi = self.Z @ self.KiZ
                 
         except np.linalg.LinAlgError:
@@ -405,12 +406,12 @@ class GP:
                 # Left boundary found
                 tmin *= 2
                 if verb > 0:
-                    print(f"Ropt: tnew=tmin, increasing tmin={tmin}")
+                    print(f"opt: tnew=tmin, increasing tmin={tmin}")
             else:
                 # Right boundary found
                 tmax /= 2.0
                 if verb > 0:
-                    print(f"Ropt: tnew=tmax, decreasing tmax={tmax}")
+                    print(f"opt: tnew=tmax, decreasing tmax={tmax}")
             
             # Check that boundaries are still valid
             if tmin >= tmax:

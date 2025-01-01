@@ -352,7 +352,7 @@ def laGP(Xref: np.ndarray,
 
 def alc(gp, Xcand, Xref, verb=0):
     """
-    CPU implementation of ALC criterion.
+    Python implementation of ALC criterion.
     
     Args:
         gp: GP instance with attributes like m, n, Ki, d, g, phi, X
@@ -369,7 +369,7 @@ def alc(gp, Xcand, Xref, verb=0):
     ncand = Xcand.shape[0]
     nref = Xref.shape[0]
     
-    # k <- covar(X1=X, X2=Xref, d=Zt$d, g=0)
+    # Precompute covariance matrix
     k = covar(Xref, gp.X, gp.d)
     
     # Initialize ALC scores
