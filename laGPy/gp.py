@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import os
 from scipy.stats import gamma
+from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union 
@@ -54,17 +55,17 @@ class GP:
         
         try:
             # Calculate Cholesky decomposition
-            L = np.linalg.cholesky(self.K)
+            L = cho_factor(self.K)
+        
+            # inverse calculation
+            self.Ki = cho_solve(L, np.eye(self.K.shape[0]))
             
-            # Update inverse
-            self.Ki = np.linalg.inv(L) @ np.linalg.inv(L).T
+            # log determinant calculation
+            self.ldetK = 2 * np.sum(np.log(np.diag(L[0])))
             
-            # Update log determinant
-            self.ldetK = 2 * np.sum(np.log(np.diag(L)))
-            
-            # Update KiZ if Z exists
             if self.Z is not None:
-                self.KiZ = np.linalg.solve(self.K, self.Z)
+                # More efficient solve
+                self.KiZ = cho_solve(L, self.Z)
                 self.phi = self.Z @ self.KiZ
                 
         except np.linalg.LinAlgError:
@@ -405,12 +406,12 @@ class GP:
                 # Left boundary found
                 tmin *= 2
                 if verb > 0:
-                    print(f"Ropt: tnew=tmin, increasing tmin={tmin}")
+                    print(f"opt: tnew=tmin, increasing tmin={tmin}")
             else:
                 # Right boundary found
                 tmax /= 2.0
                 if verb > 0:
-                    print(f"Ropt: tnew=tmax, decreasing tmax={tmax}")
+                    print(f"opt: tnew=tmax, decreasing tmax={tmax}")
             
             # Check that boundaries are still valid
             if tmin >= tmax:
@@ -513,7 +514,7 @@ class GP:
         Returns:
             Dictionary with the following keys:
                 "mean": Mean predictions
-                "var": Variance predictions
+                "s2": Variance predictions
                 "df": Degrees of freedom
                 "llik": Log likelihood
         """
@@ -536,7 +537,7 @@ class GP:
         
         return {
             "mean": mean,
-            "var": var,
+            "s2": var,
             "df": df,
             "llik": llik
         }
@@ -737,6 +738,7 @@ def buildGP(X: np.ndarray,
          g: float = 1/10000,
          wdir: str = '.',
          fname: str = 'GPRmodel.gp',
+         export: bool = True,
          verb: int = 0) -> GP:
     """
     Builds GP for Gaussian Process Regression. 
@@ -749,6 +751,7 @@ def buildGP(X: np.ndarray,
         g: Nugget parameter
         wdir: Directory to save the GP model
         fname: Name of the GP model file
+        export: Whether to export the GP model to a file
         verb: Verbosity level
         
     Returns:
@@ -761,18 +764,20 @@ def buildGP(X: np.ndarray,
             phi: Precision parameter
             X: Design matrix
     """
-    d_prior = darg(d, X)
-    g_prior = garg(g, Z)
+    d_prior = darg(d, X) if d is None else d
+    g_prior = garg(g, Z) if g is None else g
     
     gp = new_gp(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
     optimize_parameters(gp, d_prior, g_prior, verb)
 
-    #save GP model to file that can be readily imported
-    with open(fname, 'wb') as file:
-        pickle.dump(gp, file)
+    #if required, save GP model to file that can be readily imported
+    if export:
+        full_path = os.path.join(wdir, fname)
+        with open(full_path, 'wb') as file:
+            pickle.dump(gp, file)
 
-    if verb > 0:
-        print(f"GP model saved to {fname}")
+        if verb > 0:
+            print(f"GP model saved to {fname}")
 
     return gp
 

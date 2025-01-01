@@ -37,38 +37,35 @@ def covar_symm(X: np.ndarray, d: float, g: float) -> np.ndarray:
     K.flat[::K.shape[0] + 1] += g
     return K
 
-def calc_g_mui_kxy(col, x, X, n, Ki, Xref, nref, d, g):
+def calc_g_mui_kxy(Xcand, X, Ki, Xref, d, g):
     """
-    Calculate the g vector, mui, and kxy for the IECI calculation.
+    Calculate the g vector, mui, and kxy for all candidate points.
     
     Args:
-        col: Number of columns (features)
-        x: Single input point (1D numpy array)
+        Xcand: Candidate points (2D numpy array)
         X: Input data matrix (2D numpy array)
-        n: Number of data points in X
         Ki: Inverse of the covariance matrix of X (2D numpy array)
         Xref: Reference data matrix (2D numpy array)
-        nref: Number of reference points
         d: Range parameters (1D numpy array)
         g: Nugget parameter
         
     Returns:
-        Tuple of (mui, gvec, kxy)
+        Tuple of (mui, gvec, kxy) for all candidate points
     """
-    # Calculate kx: covariance between x and each point in X
-    kx = covar(X, x, d).ravel()
+    # Calculate kx: covariance between each candidate point and each point in X
+    kx = covar(X, Xcand, d)  # Shape: (ncand, n)
     
-    # Calculate kxy: covariance between x and each point in Xref
-    kxy = covar(x, Xref, d).ravel() if nref > 0 else None
+    # Calculate kxy: covariance between each candidate point and each point in Xref
+    kxy = covar(Xcand, Xref, d) if Xref.size > 0 else None  # Shape: (ncand, nref)
 
-    # Calculate gvec: Ki * kx
-    gvec = Ki @ kx
-    
-    # Calculate mui: 1 + g - kx' * gvec
-    mui = 1.0 + g - kx @ gvec
-    
-    # Calculate gvec: - Kikx/mui
-    gvec *= -1.0 / mui
+    # Calculate gvec: Ki * kx for each candidate point
+    gvec = kx.T @ Ki  # Shape: (ncand, n)
+
+    # Calculate mui: 1 + g - diag(kx @ gvec.T)
+    mui = 1.0 + g - np.einsum('ij,ij->i', kx.T, gvec)  # Shape: (ncand,)
+
+    # Calculate gvec: - Kikx/mui for each candidate point
+    gvec = -gvec / mui[:, np.newaxis]  # Broadcasting to divide each row by corresponding mui
 
     return mui, gvec, kxy
 

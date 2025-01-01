@@ -46,8 +46,7 @@ def fullGP(Xref: np.ndarray,
             g_posterior: Posterior nugget parameter
     """
 
-    gp = buildGP(X, Z, d, g, verb)
-    optimize_parameters(gp, d, g, verb)
+    gp = buildGP(X, Z, d, g, export=False, verb=verb)
 
     if lite:
         results = gp.predict_lite(Xref)
@@ -56,7 +55,7 @@ def fullGP(Xref: np.ndarray,
 
     return {
         "mean": results["mean"],
-        "s2": results["var"],
+        "s2": results["s2"],
         "df": results["df"],
         "llik": results["llik"],
         "d_posterior": gp.d,
@@ -182,7 +181,7 @@ def _laGP(Xref: np.ndarray,
     
     return {
         "mean": results["mean"],
-        "s2": results["var"],
+        "s2": results["s2"],
         "df": results["df"],
         "llik": results["llik"],
         "selected": selected,
@@ -262,15 +261,19 @@ def laGP(Xref: np.ndarray,
     nref = Xref.shape[0]
     
     # Input validation
-    if start < 6 or end <= start:
-        raise ValueError("must have 6 <= start < end")
-    if start is None:
+    if start is None and end is not None:
+        raise ValueError("start must be provided ( <= start < end) if end is provided")
+    if start is not None:
+        if start < 6 or end <= start:
+            raise ValueError("must have 6 <= start < end")
         if end is None:
-            print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
-        else:
-            raise ValueError("start must be provided ( <= start < end) if end is provided")
-    if end == n:
-        print("WARNING: Using full training design for GP (i.e., NOT a local approximate GP!)")
+            print("WARNING: Target design size is not provided. Using full training design for GP (i.e., NOT a local approximate GP!)")
+        elif end > n:
+            print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
+                  f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            end = n
+        elif end == n:
+            print(f"WARNING: Target design size = {end} is equal to training design size = {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
     if Xref.shape[1] != m:
         raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
     if len(Z) != n:
@@ -325,7 +328,7 @@ def laGP(Xref: np.ndarray,
             'close': close
         }
     
-    elif (start is None and end is None) or end == n: #full GP implementation
+    elif (start is None and end is None) or end >= n: #full GP implementation
         results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
         result = {
             'mean': results['mean'],
@@ -352,7 +355,7 @@ def laGP(Xref: np.ndarray,
 
 def alc(gp, Xcand, Xref, verb=0):
     """
-    CPU implementation of ALC criterion.
+    Python implementation of ALC criterion.
     
     Args:
         gp: GP instance with attributes like m, n, Ki, d, g, phi, X
@@ -369,36 +372,26 @@ def alc(gp, Xcand, Xref, verb=0):
     ncand = Xcand.shape[0]
     nref = Xref.shape[0]
     
-    # Allocate vectors
-    # gvec = np.zeros(n)
-    # kxy = np.zeros(nref)
-    # kx = np.zeros(n)
-    # ktKikx = np.zeros(nref)
-    
-    # k <- covar(X1=X, X2=Xref, d=Zt$d, g=0)
+    # Precompute covariance matrix
     k = covar(Xref, gp.X, gp.d)
     
     # Initialize ALC scores
     alc_scores = np.zeros(ncand)
     
-    # Calculate the ALC for each candidate
-    for i in range(ncand):
-        if verb > 0:
-            print(f"alc: calculating ALC for point {i+1} of {ncand}")
+    # Calculate the ALC for each candidate    
+    if verb > 0:
+        print(f"alc: calculating ALC for {ncand} points")
+    mui, gvec, kxy = calc_g_mui_kxy(Xcand, gp.X, gp.Ki, Xref, gp.d, gp.g)
+
+    # Create a mask for valid mui values
+    valid_mask = mui > np.finfo(float).eps
+    
+    # Initialize alc_scores with -inf
+    alc_scores = np.full(ncand, -np.inf)
         
-        # Calculate the g vector, mui, and kxy
-        mui, gvec, kxy = calc_g_mui_kxy(m, Xcand[i], gp.X, gp.X.shape[0], gp.Ki, Xref, Xref.shape[0], gp.d, gp.g)
-        
-        # Skip if too small value to avoid numerical problems
-        if mui <= np.finfo(float).eps:
-            alc_scores[i] = -np.inf
-            continue
-        
-        # Use g, mu, and kxy to calculate ktKik.x
-        ktKikx = calc_ktKikx(None, nref, k, gp.X.shape[0], gvec, mui, kxy, None, None)
-        
-        # Calculate the ALC
-        alc_scores[i] = calc_alc(nref, ktKikx, [0, 0], gp.phi, df)
+    if np.any(valid_mask):
+        ktKikx = calc_ktKikx(None, nref, k, gp.X.shape[0], gvec[valid_mask], mui[valid_mask], kxy[valid_mask], None, None)
+        alc_scores[valid_mask] = calc_alc(nref, ktKikx, [0, 0], gp.phi, df)
     
     return alc_scores
 
@@ -420,39 +413,29 @@ def calc_ktKikx(ktKik, m, k, n, g, mui, kxy, Gmui=None, ktGmui=None):
     Returns:
         ktKikx: Calculated ktKikx vector (1D numpy array)
     """
-    ktKikx = np.zeros(m)
-
+    # Check for dimension mismatch
+    if k.shape[1] != g.shape[1]:
+        raise ValueError(f"Dimension mismatch: k.shape = {k.shape}, g.shape = {g.shape}")
+    # Calculate ktKikx
     if Gmui is not None:
         Gmui = np.outer(g, g) / mui
         assert ktGmui is not None
+        ktGmui = np.dot(Gmui, k.T)
+        ktKikx = np.dot(ktGmui, k.T)
+        if ktKik is not None:
+            ktKikx += ktKik
+    else:
+        dot_products = np.dot(g, k.T)
+        squared_dot_products = dot_products ** 2
+        ktKikx = squared_dot_products.flatten() * mui
+        if ktKik is not None:
+            ktKikx += ktKik
 
-    for i in range(m):
+    # Add 2*diag(kxy %*% t(g) %*% k)
+    ktKikx += 2.0 * dot_products.flatten() * kxy.flatten()
 
-        if k[i].ndim > 1:
-            k[i] = k[i].flatten()
-        if g[i].ndim > 1:
-            g[i] = g[i].flatten()
-
-        if k[i].shape[0] != g.shape[0]:
-            raise ValueError(f"Dimension mismatch: k[{i}].shape = {k[i].shape}, g.shape = {g.shape}")
-
-        if Gmui is not None:
-            ktGmui = np.dot(Gmui, k[i])
-            if ktKik is not None:
-                ktKikx[i] = ktKik[i] + np.dot(ktGmui, k[i])
-            else:
-                ktKikx[i] = np.dot(ktGmui, k[i])
-        else:
-            if ktKik is not None:
-                ktKikx[i] = ktKik[i] + (np.dot(k[i], g) ** 2) * mui
-            else:
-                ktKikx[i] = (np.dot(k[i], g) ** 2) * mui
-
-        # Add 2*diag(kxy %*% t(g) %*% k)
-        ktKikx[i] += 2.0 * np.dot(k[i], g) * kxy[i]
-
-        # Add kxy^2/mui
-        ktKikx[i] += (kxy[i] ** 2) / mui
+    # Add kxy^2/mui
+    ktKikx += (kxy ** 2).flatten() / mui
 
     return ktKikx
 
@@ -462,7 +445,7 @@ def calc_alc(m, ktKik, s2p, phi, tdf, badj=None, w=None):
     
     Args:
         m: Number of points
-        ktKik: Array of ktKik values (1D numpy array)
+        ktKik: Array of ktKik values (2D numpy array)
         s2p: Array of s2p values (1D numpy array)
         phi: Scalar value
         badj: Optional array of adjustment factors (1D numpy array)
@@ -470,24 +453,26 @@ def calc_alc(m, ktKik, s2p, phi, tdf, badj=None, w=None):
         w: Optional array of weights (1D numpy array)
         
     Returns:
-        ALC value
+        ALC values for each candidate point (1D numpy array)
     """
     dfrat = tdf / (tdf - 2.0)
-    alc = 0.0
     
-    for i in range(m):
-        zphi = (s2p[1] + phi) * ktKik[i]
-        if badj is not None:
-            ts2 = badj[i] * zphi / (s2p[0] + tdf)
-        else:
-            ts2 = zphi / (s2p[0] + tdf)
-        
-        if w is not None:
-            alc += w[i] * dfrat * ts2
-        else:
-            alc += ts2 * dfrat
-    
-    return alc / m
+    # Calculate zphi for all points
+    zphi = (s2p[1] + phi) * ktKik
+
+    # Calculate ts2 based on whether badj is provided
+    if badj is not None:
+        ts2 = badj[:, np.newaxis] * zphi / (s2p[0] + tdf)
+    else:
+        ts2 = zphi / (s2p[0] + tdf)
+
+    # Calculate alc based on whether w is provided
+    if w is not None:
+        alc = w[:, np.newaxis] * dfrat * ts2
+    else:
+        alc = ts2 * dfrat
+
+    return alc 
 
 
 

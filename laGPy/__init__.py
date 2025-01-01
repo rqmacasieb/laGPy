@@ -5,7 +5,8 @@ from .laGPy import (
     Method,
     closest_indices,
     laGP,
-    calc_ktKikx
+    calc_ktKikx, 
+    fullGP
 )
 
 # Import from covar.py
