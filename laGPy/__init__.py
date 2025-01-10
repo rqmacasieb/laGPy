@@ -37,18 +37,6 @@ from . import _version
 __version__ = _version.get_versions()['version']
 
 
-# from .laGPy import *
-# from .gp import *
-# from .covar import *
-# from .matrix import get_data_rect
-# from .order import order, rank, rand_indices
-# from .covar_sep import covar_sep_symm, covar_sep, diff_covar_sep, diff_covar_sep_symm
-# from .utils.distance import *
-# from .params import *
-# from .gamma import *
-
-
-
 __all__ = [
     'laGP',
     'buildGP',

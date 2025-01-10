@@ -30,28 +30,6 @@ def check_arg(d: Dict) -> None:
     if len(d['ab']) != 2 or any(a < 0 for a in d['ab']):
         raise ValueError("ab should be a positive 2-vector")
 
-# def Igamma_inv(a: float, y: float, lower: bool = False, log: bool = False) -> float:
-#     """
-#     Calculate the beta parameter of an Inverse Gamma distribution.
-    
-#     Args:
-#         a: Shape parameter
-#         y: Location parameter
-#         lower: Whether to use lower tail
-#         log: Whether y is in log scale
-    
-#     Returns:
-#         Beta parameter value
-#     """
-#     from scipy.stats import invgamma
-#     if log:
-#         y = np.exp(y)
-#     if lower:
-#         p = y
-#     else:
-#         p = 1 - y
-#     return invgamma.ppf(p, a)
-
 def get_Ds(X: np.ndarray, p: float = 0.1, samp_size: int = 1000) -> Dict:
     """
     Calculate initial starting value and range for lengthscale parameter.

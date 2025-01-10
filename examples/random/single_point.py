@@ -9,10 +9,12 @@ Xref = np.random.rand(1, 10)
 # Create and fit LaGP model
 sims = laGPy.laGP(
     Xref=Xref,             # Reference points
-    start=10,               # Initial points
-    end=30,                # Total points to select
     X=X,                   # Input points
     Z=Z,                   # Output value
+    start=10,               # Initial points
+    end=20,                # Total points to select
+    d = 1,
+    g = 0.01,
     verb=1                # Show optimization progress
 )
 
