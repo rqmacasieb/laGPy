@@ -17,5 +17,7 @@ X_dv = pd.read_csv('dv_untried.dat', header = 0).values.transpose() #1 x n_dv
 start_time = time.time()
 sims = gp.predict(X_dv)
 end_time = time.time()
+print("Predictions:", sims['mean'])
+print("Variances:", sims['Sigma'])
 print(f"Prediction time: {end_time - start_time:.6f} seconds")
 

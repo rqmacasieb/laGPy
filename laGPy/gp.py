@@ -764,8 +764,8 @@ def buildGP(X: np.ndarray,
             phi: Precision parameter
             X: Design matrix
     """
-    d_prior = darg(d, X) if d is None else d
-    g_prior = garg(g, Z) if g is None else g
+    d_prior = darg(d, X)
+    g_prior = garg(g, Z)
     
     gp = new_gp(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
     optimize_parameters(gp, d_prior, g_prior, verb)
