@@ -7,6 +7,7 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     author='Reygie Macasieb',
     author_email='reygie.macasieb@research.uwa.edu.au',
+    license='GNU General Public License v3 (GPLv3)',
     description='Python implementation of local approximate GP',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',

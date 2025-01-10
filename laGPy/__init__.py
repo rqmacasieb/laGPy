@@ -50,20 +50,9 @@ __version__ = _version.get_versions()['version']
 
 
 __all__ = [
-    'laGP'
-    # 'Method',
-    # 'MLEResult',
-    # 'GP',
-    # 'new_gp',
-    # 'pred_gp',
-    # 'update_gp',
-    # 'covar',
-    # 'covar_symm',
-    # 'distance',
-    # 'get_data_rect',
-    # 'order',
-    # 'rank',
-    # 'rand_indices',
-    # 'gamma',
+    'laGP',
+    'buildGP',
+    'loadGP',
+    'fullGP',
     '__version__'
 ]
