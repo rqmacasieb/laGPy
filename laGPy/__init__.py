@@ -1,36 +1,31 @@
 """laGPy: Python implementation of local approximate GP"""
 
-
 from .laGPy import (
     Method,
-    closest_indices,
     laGP,
-    calc_ktKikx, 
     fullGP
 )
 
-# Import from covar.py
 from .covar import (
     covar,
     diff_covar_symm
 )
 
-# Import from params.py
 from .params import (
     darg,
     garg
 )
 
-# Import from utils.distance
 from .utils.distance import (
     distance,
-    distance_asymm,
-    closest_indices
+    distance_asymm
 )
 
 from .gp import (
     buildGP,
-    loadGP
+    loadGP, 
+    newGP,
+    updateGP
 )
 
 from . import _version
@@ -42,5 +37,7 @@ __all__ = [
     'buildGP',
     'loadGP',
     'fullGP',
+    'newGP',
+    'updateGP',
     '__version__'
 ]

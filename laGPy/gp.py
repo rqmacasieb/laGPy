@@ -499,7 +499,7 @@ class GP:
 
     def update(self, X_new: np.ndarray, Z_new: np.ndarray, verb: int = 0) -> None:
         """Update GP with new observations"""
-        self = update_gp(self, X_new, Z_new)
+        self = updateGP(self, X_new, Z_new)
         if verb > 0:
             print(f"Updated GP with new point(s). New n = {self.n}")
 
@@ -643,7 +643,7 @@ class GP:
         F = 0.5 * np.trace(KidK @ KidK)
         return F
     
-def new_gp(X: np.ndarray, Z: np.ndarray, d: float, g: float, 
+def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float, 
            compute_derivs: bool = False) -> GP:
     """
     Create a new Gaussian Process
@@ -683,7 +683,7 @@ def new_gp(X: np.ndarray, Z: np.ndarray, d: float, g: float,
         
     return gp
 
-def update_gp(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
+def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
     """
     Update GP with new observations
     
@@ -767,7 +767,7 @@ def buildGP(X: np.ndarray,
     d_prior = darg(d, X)
     g_prior = garg(g, Z)
     
-    gp = new_gp(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
+    gp = newGP(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
     optimize_parameters(gp, d_prior, g_prior, verb)
 
     #if required, save GP model to file that can be readily imported
