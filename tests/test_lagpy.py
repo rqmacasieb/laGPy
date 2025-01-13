@@ -1,5 +1,5 @@
 import unittest
-from laGPy import laGP, Method, buildGP, loadGP, fullGP
+from laGPy import laGP, Method, buildGP, loadGP, fullGP, newGP, updateGP
 import numpy as np
 
 class TestLaGPy(unittest.TestCase):
@@ -63,6 +63,25 @@ class TestLaGPy(unittest.TestCase):
         self.assertIn('llik', result)
         self.assertIn('d_posterior', result)
         self.assertIn('g_posterior', result)
+
+    def test_newGP(self):
+        gp = newGP(self.X, self.Z, self.d, self.g)
+        self.assertIsNotNone(gp)
+        self.assertEqual(gp.X.shape, self.X.shape)
+        self.assertEqual(gp.Z.shape, self.Z.shape)
+        self.assertEqual(gp.d, self.d)
+        self.assertEqual(gp.g, self.g)
+
+    def test_updateGP(self):
+        gp = newGP(self.X, self.Z, self.d, self.g)
+        
+        new_X = np.random.rand(5, 2)
+        new_Z = np.sin(new_X[:, 0]) + np.cos(new_X[:, 1]) + 0.1 * np.random.randn(5)
+        
+        gp.update(new_X, new_Z)
+
+        self.assertEqual(gp.X.shape[0], self.X.shape[0] + new_X.shape[0])
+        self.assertEqual(gp.Z.shape[0], self.Z.shape[0] + new_Z.shape[0])
 
 if __name__ == '__main__':
     unittest.main()

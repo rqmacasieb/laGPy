@@ -119,7 +119,7 @@ def _laGP(Xref: np.ndarray,
     X_init = X[idx[:start]]
     Z_init = Z[idx[:start]]
     
-    gp = new_gp(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
+    gp = newGP(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
     
     # Get rect bounds if needed
     if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
