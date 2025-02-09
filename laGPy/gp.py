@@ -678,9 +678,7 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
             ldetK=ldetK, d=d, g=g, phi=phi)
     
     if compute_derivs:
-        # Add derivative calculations here if needed
-        pass
-        
+        gp.new_dK()
     return gp
 
 def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:

@@ -3,8 +3,8 @@ import laGPy
 import time
 
 # Generate example data
-X = np.random.rand(1000, 20)
-Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(1000)
+X = np.random.rand(100, 20)
+Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100)
 Xref = np.random.rand(1, 20)
 start_time = time.time()
 
