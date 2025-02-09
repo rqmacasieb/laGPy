@@ -21,14 +21,15 @@ def check_arg(d: Dict) -> None:
     if not isinstance(d['min'], (int, float)) or d['min'] < 0 or d['min'] > d['max']:
         raise ValueError("d['min'] should be a positive scalar < d['max']")
     
-    if any(s < d['min'] or s > d['max'] for s in np.atleast_1d(d['start'])):
+    start_values = np.atleast_1d(d['start'])
+    if np.any((start_values < d['min']) | (start_values > d['max'])):
         raise ValueError("(all) starting d-value(s) should be positive scalars in [d['min'], d['max']]")
     
     if not isinstance(d['mle'], bool):
         raise ValueError("d['mle'] should be a scalar logical")
     
-    if len(d['ab']) != 2 or any(a < 0 for a in d['ab']):
-        raise ValueError("ab should be a positive 2-vector")
+    if len(d['ab']) != 2 or np.any(np.array(d['ab']) < 0):
+        raise ValueError("d['ab'] should be a length 2 vector of non-negative scalars")
 
 def get_Ds(X: np.ndarray, p: float = 0.1, samp_size: int = 1000) -> Dict:
     """

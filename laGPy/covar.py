@@ -83,22 +83,19 @@ def diff_covar_symm(X: np.ndarray, d: float) -> Tuple[np.ndarray, np.ndarray]:
     """
     d2 = d**2
     n = X.shape[0]
-    dK = np.zeros((n, n))
-    d2K = np.zeros((n, n))
     
     # Calculate pairwise distances using the imported distance function
     D = distance(X, X)
     
-
-    # Calculate the covariance derivatives
-    for i in range(n):
-        for j in range(i + 1, n):
-            dist = D[i, j]
-            dK[i, j] = dK[j, i] = dist * np.exp(-dist / d) / d2
-            d2K[i, j] = d2K[j, i] = dK[i, j] * (dist - 2.0 * d) / d2
-
-        dK[i, i] = 0.0
-        d2K[i, i] = 0.0
-            
+    # Calculate first derivative
+    dK = np.where(~np.eye(n, dtype=bool), 
+                 D * np.exp(-D / d) / d2, 
+                 0)
+    
+    # Calculate second derivative
+    d2K = np.where(~np.eye(n, dtype=bool), 
+                   dK * (D - 2.0 * d) / d2,
+                   0)
+    
     return dK, d2K
 
