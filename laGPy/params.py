@@ -73,12 +73,12 @@ def garg(g: Optional[Union[float, Dict]] = None,
     """
     # Coerce inputs
     if g is None:
-        g = {}
+        g = {'mle': True}
     elif isinstance(g, (int, float)):
         g = {'start': g}
-    if not isinstance(g, dict):
+    elif not isinstance(g, dict):
         raise ValueError("g should be a dict, numeric, or None")
-    
+
     # Check mle
     g.setdefault('mle', False)
     if not isinstance(g['mle'], bool):
@@ -124,7 +124,7 @@ def garg(g: Optional[Union[float, Dict]] = None,
             s2max = np.mean(r2s)
             g['ab'][1] = lgp_Igamma_inv(
                 g['ab'][0], 
-                0.95 * sp_gamma(0.95, g['ab'][0]), 
+                0.95 * sp_gamma(g['ab'][0]), 
                 lower=True, 
                 ulog=False
             ) / s2max
@@ -142,7 +142,7 @@ def darg(d: Optional[Union[float, Dict]] = None,
     
     Args:
         d: Lengthscale parameter specification:
-           - None: use defaults
+           - None: perform prior calculations and mle for optimization
            - float: use as starting value
            - dict: full specification
         X: Input matrix for distance calculations
@@ -151,16 +151,16 @@ def darg(d: Optional[Union[float, Dict]] = None,
     Returns:
         Dictionary containing processed parameter settings
     """
-    # Coerce inputs
+    # Coerce inputs first
     if d is None:
-        d = {}
+        d = {'mle': True}
     elif isinstance(d, (int, float)):
         d = {'start': d}
-    if not isinstance(d, dict):
+    elif not isinstance(d, dict):
         raise ValueError("d should be a dict, numeric, or None")
     
-    # Check for MLE
-    d.setdefault('mle', True)
+    # Now d is guaranteed to be a dict, so we can use setdefault
+    d.setdefault('mle', False)
     
     # Check if we need to build Ds
     need_Ds = (
