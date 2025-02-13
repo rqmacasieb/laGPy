@@ -21,8 +21,13 @@ from .utils.distance import (
     distance_asymm
 )
 
+from .utils.brent_fmin import (
+    brent_fmin
+)
+
 from .gp import (
     buildGP,
+
     loadGP, 
     newGP,
     updateGP

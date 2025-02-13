@@ -9,6 +9,7 @@ from typing import Optional, Tuple, Union
 from .matrix import *
 from .covar import *
 from .params import *
+from .utils.brent_fmin import brent_fmin
 
 @dataclass
 class OptInfo:
@@ -351,8 +352,8 @@ class GP:
         return dllik, d2llik
 
     def optimize(self, theta: str, tmin: float, tmax: float, 
-            ab: Optional[Tuple[float, float]], msg: str = "", 
-            its: int = 0, verb: int = 0) -> float:
+        ab: Optional[Tuple[float, float]], msg: str = "", 
+        its: int = 0, verb: int = 0) -> float:
         """
         Optimize GP parameters using Brent's method.
         
@@ -377,26 +378,24 @@ class GP:
         # Create optimization info structure
         info = OptInfo(gp=self, theta=theta, ab=ab, verb=verb)
         
-        def objective(x: float) -> float:
+        def objective(x: float, info: OptInfo) -> float:
             """Negative log likelihood objective function"""
             # Update GP parameters
-            if theta == 'lengthscale':
-                self.update_params(d=x, g=self.g)
+            if info.theta == 'lengthscale':
+                info.gp.update_params(d=x, g=info.gp.g)
             else:
-                self.update_params(d=self.d, g=x)
+                info.gp.update_params(d=info.gp.d, g=x)
             
             # Calculate negative log likelihood
-            return -self.log_likelihood(ab if theta == 'lengthscale' else None,
-                                    ab if theta == 'nugget' else None)
+            return -info.gp.log_likelihood(
+                info.ab if info.theta == 'lengthscale' else None,
+                info.ab if info.theta == 'nugget' else None
+            )
         
         while True:
-            result = minimize_scalar(objective, 
-                                bounds=(tmin, tmax),
-                                method='bounded',
-                                options={'xatol': np.finfo(float).eps})
-            
-            tnew = result.x
-            info.its = result.nfev
+            # Use Brent's method for optimization
+            tnew = brent_fmin(tmin, tmax, objective, info, np.finfo(float).eps)
+            info.its += 1
             
             # Check if solution is on boundary
             if tmin < tnew < tmax:
@@ -430,6 +429,88 @@ class GP:
             print(f"opt {msg}: told={th} -[{info.its}]-> tnew={tnew}")
         
         return tnew
+
+    # def optimize(self, theta: str, tmin: float, tmax: float, 
+    #         ab: Optional[Tuple[float, float]], msg: str = "", 
+    #         its: int = 0, verb: int = 0) -> float:
+    #     """
+    #     Optimize GP parameters using bounded optimization via SciPy's minimize_scalar.
+    #     Uses Brent's method internally with additional boundary handling.
+        
+    #     Args:
+    #         theta: Parameter to optimize ('lengthscale' or 'nugget')
+    #         tmin: Minimum value for parameter
+    #         tmax: Maximum value for parameter
+    #         ab: Optional tuple of prior parameters
+    #         msg: Message for verbose output
+    #         its: Initial iteration count
+    #         verb: Verbosity level
+            
+    #     Returns:
+    #         Optimized parameter value
+    #     """
+    #     # Sanity check
+    #     assert tmin < tmax, "tmin must be less than tmax"
+        
+    #     # Get current parameter value
+    #     th = self.d if theta == 'lengthscale' else self.g
+        
+    #     # Create optimization info structure
+    #     info = OptInfo(gp=self, theta=theta, ab=ab, verb=verb)
+        
+    #     def objective(x: float) -> float:
+    #         """Negative log likelihood objective function"""
+    #         # Update GP parameters
+    #         if theta == 'lengthscale':
+    #             self.update_params(d=x, g=self.g)
+    #         else:
+    #             self.update_params(d=self.d, g=x)
+            
+    #         # Calculate negative log likelihood
+    #         return -self.log_likelihood(ab if theta == 'lengthscale' else None,
+    #                                 ab if theta == 'nugget' else None)
+        
+    #     while True:
+    #         result = minimize_scalar(objective, 
+    #                             bounds=(tmin, tmax),
+    #                             method='bounded',
+    #                             options={'xatol': np.finfo(float).eps})
+            
+    #         tnew = result.x
+    #         info.its = result.nfev
+            
+    #         # Check if solution is on boundary
+    #         if tmin < tnew < tmax:
+    #             break
+                
+    #         if tnew == tmin:
+    #             # Left boundary found
+    #             tmin *= 2
+    #             if verb > 0:
+    #                 print(f"opt: tnew=tmin, increasing tmin={tmin}")
+    #         else:
+    #             # Right boundary found
+    #             tmax /= 2.0
+    #             if verb > 0:
+    #                 print(f"opt: tnew=tmax, decreasing tmax={tmax}")
+            
+    #         # Check that boundaries are still valid
+    #         if tmin >= tmax:
+    #             raise ValueError("Unable to optimize: tmin >= tmax")
+        
+    #     # Update GP parameters with optimal value
+    #     if theta == 'lengthscale':
+    #         if self.d != tnew:
+    #             self.update_params(d=tnew, g=self.g)
+    #     else:
+    #         if self.g != tnew:
+    #             self.update_params(d=self.d, g=tnew)
+        
+    #     # Print message if verbose
+    #     if verb > 0:
+    #         print(f"opt {msg}: told={th} -[{info.its}]-> tnew={tnew}")
+        
+    #     return tnew
 
     def update_params(self, d: float, g: float) -> None:
         """
@@ -678,9 +759,7 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
             ldetK=ldetK, d=d, g=g, phi=phi)
     
     if compute_derivs:
-        # Add derivative calculations here if needed
-        pass
-        
+        gp.new_dK()
     return gp
 
 def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
