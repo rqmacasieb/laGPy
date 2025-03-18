@@ -75,7 +75,7 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
 
     # Get indices of closest points
     if n > close:
-        idx = np.argsort(D)[:close]
+        idx = np.argsort(D.reshape(-1))[:close]
     else:
         idx = np.arange(n)
         
@@ -84,6 +84,6 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
         idx = idx[np.argsort(D[idx].reshape(-1))]
     elif start < close:
         # Partially sort to get start closest
-        idx = np.argpartition(D[idx].reshape(-1), start)
+        idx = idx[np.argpartition(D[idx].reshape(-1), start)]
         
     return idx
