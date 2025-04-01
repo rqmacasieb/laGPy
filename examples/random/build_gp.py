@@ -11,7 +11,7 @@ start_time = time.time()
 
 
 # Create and fit LaGP model
-gp = laGPy.buildGP(X, Z, d=9.9157, g=0.0001,verb=1)
+gp = laGPy.buildGP(X, Z,  verb=1)
 
 elapsed_time = time.time() - start_time
 print(f"Elapsed time to execute buildGP: {elapsed_time:.4f} seconds")

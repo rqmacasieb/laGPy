@@ -17,7 +17,8 @@ sims = laGPy.laGP(
     end=40,                # Total points to select
     X=X,                   # Input points
     Z=y,                   # Output value
-    verb=1                # Show optimization progress
+    verb=0,               # Show optimization progress
+    method = 'nn'
 )
 
 print(f"Final parameters: lengthscale={sims['d']:.6f}, nugget={sims['g']:.6f}")
