@@ -70,7 +70,7 @@ def _laGP(Xref: np.ndarray,
          end: Optional[int] = None, 
          d: Optional[Union[float, Tuple[float, float]]] = None,
          g: float = 1/10000,
-         method: Method = Method.ALC,  # Use Method enum
+         method: Method = Method.ALC,
          close: Optional[int] = None,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
@@ -103,72 +103,77 @@ def _laGP(Xref: np.ndarray,
         - Final nugget
     """
     n = X.shape[0]
-    m = X.shape[1]
-    nref = Xref.shape[0]
-
     # Get closest points for initial design
     idx = closest_indices(start, Xref, n, X, close, 
-                         method in ["alcray", "alcopt"])
-    # Setup candidate points
-    cand_idx = idx[start:]
-    Xcand = X[cand_idx]
-    selected = np.zeros(end, dtype=int)
-    selected[:start] = idx[:start]
+                         method in [Method.ALCRAY, Method.ALCOPT, Method.NN])
 
-    # Build initial GP
-    X_init = X[idx[:start]]
-    Z_init = Z[idx[:start]]
+    if method == Method.NN:
+        if verb > 0:
+            print(f"NN method selected. Using {end} nearest points from the training set.")
+        gp = newGP(X[idx[:end]], Z[idx[:end]], get_value(d, 'start'), get_value(g, 'start'))
+        selected = idx[:end]
     
-    gp = newGP(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
-    
-    # Get rect bounds if needed
-    if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
-        rect = get_data_rect(Xcand)
-    
-    # Iteratively select points. Only performs ALC for now.
-    for i in range(start, end):
-        # Point selection logic based on method
-        if method == Method.ALCRAY: #TODO: add funx if needed. placeholder for now
-            offset = (i - start + 1) % int(np.sqrt(i - start + 1))
-            w = alcray_selection(gp, Xcand, Xref, offset, numstart, rect, verb)
-        elif method == Method.ALC:
-            scores = alc(gp, Xcand, Xref, verb) #no gpu support for now
-            w = np.argmax(scores)
-        elif method == Method.MSPE: #TODO: add funx if needed. placeholder for now
-            scores = mspe(gp, Xcand, Xref, verb)
-            w = np.argmin(scores)
-        else:  # Method.NN
-            w = i - start
+    else: 
+        # Setup candidate points
+        cand_idx = idx[start:]
+        Xcand = X[cand_idx]
+        selected = np.zeros(end, dtype=int)
+        selected[:start] = idx[:start]
+
+        # Build initial GP
+        X_init = X[idx[:start]]
+        Z_init = Z[idx[:start]]
+        
+        gp = newGP(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
+        
+        # Get rect bounds if needed
+        if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
+            rect = get_data_rect(Xcand)
+
+        # Iteratively select points. Only performs ALC for now.
+        for i in range(start, end):
+            # Point selection logic based on method
+            if method == Method.ALCRAY: #TODO: add funx if needed. placeholder for now
+                offset = (i - start + 1) % int(np.sqrt(i - start + 1))
+                w = alcray_selection(gp, Xcand, Xref, offset, numstart, rect, verb)
+            elif method == Method.ALC:
+                scores = alc(gp, Xcand, Xref, verb) #no gpu support for now
+                w = np.argmax(scores)
+            elif method == Method.MSPE: #TODO: add funx if needed. placeholder for now
+                scores = mspe(gp, Xcand, Xref, verb)
+                w = np.argmin(scores)
+            # else:  # Method.NN
+            #     w = i - start
+                
+            # Record chosen point
+            selected[i] = cand_idx[w]
             
-        # Record chosen point
-        selected[i] = cand_idx[w]
-        
-        # Update GP with chosen candidate
-        gp.update(Xcand[w:w+1], Z[cand_idx[w:w+1]], verb=verb-1)
-        
-        # Re-estimate parameters periodically if requested TODO: do we need this?
-        # if param_est and (i - start + 1) % est_freq == 0:
-        #     optimize_parameters(gp, d, g, verb)
+            # Update GP with chosen candidate
+            gp.update(Xcand[w:w+1], Z[cand_idx[w:w+1]], verb=verb-1)
+            
+            # Re-estimate parameters periodically if requested TODO: do we need this?
+            # if param_est and (i - start + 1) % est_freq == 0:
+            #     optimize_parameters(gp, d, g, verb)
 
-        # Update candidate set
-        if w != len(cand_idx) - 1:
-            if method in ['alcray', 'alcopt']:
-                if w == 0:
-                    cand_idx = cand_idx[1:]
-                    Xcand = Xcand[1:]
+            # Update candidate set
+            if w != len(cand_idx) - 1:
+                if method in ['alcray', 'alcopt']:
+                    if w == 0:
+                        cand_idx = cand_idx[1:]
+                        Xcand = Xcand[1:]
+                    else:
+                        cand_idx[w:] = cand_idx[w + 1:]
+                        Xcand[w:] = Xcand[w + 1:]
                 else:
-                    cand_idx[w:] = cand_idx[w + 1:]
-                    Xcand[w:] = Xcand[w + 1:]
+                    cand_idx[w] = cand_idx[-1]
+                    Xcand[w] = Xcand[-1]
+                cand_idx = cand_idx[:-1]
+                Xcand = Xcand[:-1]
+            elif w == len(cand_idx) - 1:
+                cand_idx = cand_idx[:-1]
+                Xcand = Xcand[:-1]
             else:
-                cand_idx[w] = cand_idx[-1]
-                Xcand[w] = Xcand[-1]
-            cand_idx = cand_idx[:-1]
-            Xcand = Xcand[:-1]
-        elif w == len(cand_idx) - 1:
-            cand_idx = cand_idx[:-1]
-            Xcand = Xcand[:-1]
-        else:
-            raise ValueError("candidate index is out of bounds")
+                raise ValueError("candidate index is out of bounds")
 
     # If required, obtain parameter posterior by MLE and update gp before prediction
     optimize_parameters(gp, d, g, verb)
@@ -261,7 +266,7 @@ def laGP(Xref: np.ndarray,
     nref = Xref.shape[0]
     
     # Input validation
-    if start is None and end is not None:
+    if start is None and end is not None and method != "nn":
         raise ValueError("start must be provided ( <= start < end) if end is provided")
     if start is not None:
         if start < 6 or end <= start:
@@ -303,7 +308,7 @@ def laGP(Xref: np.ndarray,
     tic = time.time()
     
     # Call core implementation
-    if start is not None and end is not None and end < n:
+    if (start is not None and end is not None and end < n) or (start is None and method == "nn"):
         results = _laGP(Xref=Xref,
             X=X, Z=Z, start=start, end=end,        
             d=d_prior, g=g_prior,
@@ -327,7 +332,6 @@ def laGP(Xref: np.ndarray,
             'g': results['g_posterior'],
             'close': close
         }
-    
     elif (start is None and end is None) or end >= n: #full GP implementation
         results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
         result = {
@@ -340,7 +344,7 @@ def laGP(Xref: np.ndarray,
             'g': results['g_posterior'],
         }
     else:
-        raise ValueError("start and end must be provided if start is not None")
+        raise ValueError("start and end must be provided if start or end is not None")
     
     # Add s2/Sigma
     if not lite:
