@@ -108,7 +108,8 @@ def _laGP(Xref: np.ndarray,
                          method in [Method.ALCRAY, Method.ALCOPT, Method.NN])
 
     if method == Method.NN:
-        print(f"NN method selected. Using {end} nearest points from the training set.")
+        if verb > 0:
+            print(f"NN method selected. Using {end} nearest points from the training set.")
         gp = newGP(X[idx[:end]], Z[idx[:end]], get_value(d, 'start'), get_value(g, 'start'))
         selected = idx[:end]
     
