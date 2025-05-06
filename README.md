@@ -13,11 +13,11 @@ laGPy requires **Python** 3.8 (or higher). To install laGPy:
 
 Disclaimer
 -----------------------------------------------
-This Python implementation of laGP (Local Approximate Gaussian Process) was independently developed from the original R package. While this software implements the algorithms and methods described in Gramacy (2016), it is preliminary or provisional and is subject to revisions. In its current form, this package only implements the 'nearest neighbour' and 'active learning Cohn' techniques for greedy selection of local designs. Additional functionalities that was not in the original R package has been added such as building a GP using the full training dataset and saving such GP model as pickle file that can be called and executed for later purposes.
+This Python implementation of laGP (Local Approximate Gaussian Process) is an independent project not affiliated with the original R package (version 1.5-8). It implements the core concepts and algorithms from Gramacy (2016) but was developed separately without input from the original developers of the R package. As such, it may not include all features or recent updates available in the R implementation.
 
-This implementation is based on version 1.5-8 of the original laGP R package. Any features, improvements, or bug fixes introduced in versions after 1.5-8 of the original R package may not be incorporated in this Python version.
+In its current form, this package implements two key techniques for local design selection: 'nearest neighbour' and 'active learning Cohn'. It also offers additional features not found in the original R package, including the ability to build a GP using the full training dataset and save models as pickle files for later use and easier integration in other python-based tools and models that may need such GP models. This implementation is still under development and may receive updates and additional features in future releases.
 
-While the implementation is original, the intellectual approach follows the published methodology of the original authors. This package is distributed under the terms of the GNU Lesser General Public License (LGPL) version 2 or later, consistent with the licensing of the original work.
+This package is distributed under the terms of the GNU Lesser General Public License (LGPL) version 3 or later, consistent with the licensing of the original work.
 
 References
 -----------------------------------------------

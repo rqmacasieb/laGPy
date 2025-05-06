@@ -260,7 +260,9 @@ def laGP(Xref: np.ndarray,
     Z = np.asarray(Z)
     Xref = np.atleast_2d(Xref)
     
-    # Get dimensions
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+
     m = X.shape[1]
     n = X.shape[0]
     nref = Xref.shape[0]

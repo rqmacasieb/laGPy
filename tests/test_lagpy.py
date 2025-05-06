@@ -1,4 +1,5 @@
 import unittest
+import pandas as pd
 from laGPy import laGP, Method, buildGP, loadGP, fullGP, newGP, updateGP
 import numpy as np
 
@@ -82,6 +83,27 @@ class TestLaGPy(unittest.TestCase):
 
         self.assertEqual(gp.X.shape[0], self.X.shape[0] + new_X.shape[0])
         self.assertEqual(gp.Z.shape[0], self.Z.shape[0] + new_Z.shape[0])
+
+    def test_michalewicz(self):
+        X = pd.read_csv('./tests/data/mic.dv_pop.csv').drop(columns=['real_name'])
+        Y = pd.read_csv('./tests/data/mic.obs_pop.csv').drop(columns=['real_name'])['func']
+
+        Xref = pd.read_csv('./tests/data/mic.0.dv_pop.csv')
+        Yref = pd.read_csv('./tests/data/mic.0.obs_pop.csv')
+
+        for mem in Xref['real_name']:
+            sim = laGP(Xref = Xref[Xref['real_name'] == mem].drop(columns=['real_name']).values,
+                       X = X.values,
+                       Z = Y.values,
+                       start = 10, 
+                       end = 60)
+
+            val_mean = Yref.loc[Yref['real_name'] == mem]['func'].item()
+            assert abs(sim['mean'].item() - val_mean)**2 < 1e-10
+
+            val_s2 = Yref.loc[Yref['real_name'] == mem]['func_s2'].item()
+            assert abs(sim['s2'].item() - val_s2)**2 < 1e-10
+    
 
 if __name__ == '__main__':
     unittest.main()

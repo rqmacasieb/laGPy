@@ -2,8 +2,6 @@ import numpy as np
 import laGPy
 
 
-#TODO: this is not working and not needed for now. Will be fixed later as needed.
-
 # Generate example data
 X = np.random.rand(100, 10)
 Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100)

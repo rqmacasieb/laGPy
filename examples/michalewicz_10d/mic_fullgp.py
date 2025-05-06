@@ -3,16 +3,16 @@ import pandas as pd
 import laGPy
 
 # import training dataset
-X = pd.read_csv('mic.dv_pop.csv', header = 0).drop(columns=['real_name']).values #n_tr x n_dv
-y = pd.read_csv('mic.obs_pop.csv', header= 0).drop(columns=['real_name']) #n_tr x 1
-y = y['func'].values
+X = pd.read_csv('mic.dv_pop.csv', header = 0).drop(columns=['real_name']).values #This should be an array of n_tr x n_dv
+y = pd.read_csv('mic.obs_pop.csv', header= 0).drop(columns=['real_name'])
+y = y['func'].values #This should be an array of n_tr x 1
 
 #read dv values
-X_dv = pd.read_csv('dv_untried.dat', header = 0).values.transpose() #1 x n_dv
+X_dv = pd.read_csv('dv_untried.dat', header = 0).values.transpose() #This should be an array of 1 x n_dv
 
 # Create and fit LaGP model
 sims = laGPy.laGP(
-    Xref=X_dv,             # Reference points
+    Xref=X_dv,             # Reference point - untried input point to be evaluated
     start=6,               # Initial points
     end=100,                # Total points to select
     X=X,                   # Input points
