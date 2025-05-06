@@ -66,7 +66,6 @@ def closest_indices(start: int, Xref: np.ndarray, n: int, X: np.ndarray,
     Returns:
         Array of indices of closest points
     """
-    # Ensure Xref is 2D
     if len(Xref.shape) == 1:
         Xref = Xref.reshape(1, -1)
 

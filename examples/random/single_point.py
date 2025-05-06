@@ -2,17 +2,17 @@ import numpy as np
 import laGPy
 
 # Generate example data
-X = np.random.rand(100, 10)
-Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100)
-Xref = np.random.rand(1, 10)
+X = np.random.rand(100, 10) #This should be an array of n_tr x n_dv
+Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(100) #This should be an array of n_tr x 1
+Xref = np.random.rand(1, 10) #This should be an array of 1 x n_dv
 
 # Create and fit LaGP model
 sims = laGPy.laGP(
-    Xref=Xref,             # Reference points
+    Xref=Xref,             # Reference point - untried input point to be evaluated
     X=X,                   # Input points
     Z=Z,                   # Output value
     start=10,               # Initial points
-    end=20,                # Total points to select
+    end=60,                # Total points to select
     verb=1                # Show optimization progress
 )
 

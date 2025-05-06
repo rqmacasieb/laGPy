@@ -3,9 +3,9 @@ import laGPy
 import time
 
 # Generate example data
-X = np.random.rand(1000, 20)
-Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(1000)
-Xref = np.random.rand(1, 20)
+X = np.random.rand(1000, 20) #This should be an array of n_tr x n_dv    
+Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(1000) #This should be an array of n_tr x 1
+Xref = np.random.rand(1, 20) #This should be an array of 1 x n_dv
 start_time = time.time()
 
 # Create and fit LaGP model

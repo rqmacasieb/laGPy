@@ -17,7 +17,7 @@ This Python implementation of laGP (Local Approximate Gaussian Process) is an in
 
 In its current form, this package implements two key techniques for local design selection: 'nearest neighbour' and 'active learning Cohn'. It also offers additional features not found in the original R package, including the ability to build a GP using the full training dataset and save models as pickle files for later use and easier integration in other python-based tools and models that may need such GP models. This implementation is still under development and may receive updates and additional features in future releases.
 
-This package is distributed under the terms of the GNU Lesser General Public License (LGPL) version 2 or later, consistent with the licensing of the original work.
+This package is distributed under the terms of the GNU Lesser General Public License (LGPL) version 3 or later, consistent with the licensing of the original work.
 
 References
 -----------------------------------------------
