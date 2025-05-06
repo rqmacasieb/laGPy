@@ -17,7 +17,6 @@ def covar(X1: np.ndarray, X2: np.ndarray, d: float) -> np.ndarray:
     D = distance(X1, X2)
     #using isotrophic Gaussian by default
     #TODO: perhaps add an option to use other kernel functions if needed
-    D = np.asarray(D)
     K = np.exp(-D / d) 
     return K
 
