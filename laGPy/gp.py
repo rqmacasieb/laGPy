@@ -339,12 +339,23 @@ class GP:
         # Calculate second part of second derivative
         # d2llik -= 0.5 * KiZ @ two @ KiZ / phi
         KiZtwo = two @ self.KiZ
-        d2llik -= 0.5 * self.n * (self.KiZ @ KiZtwo) / self.phi
+        
+        if self.KiZ.ndim == 1:
+            d2llik -= 0.5 * self.n * (self.KiZ.dot(KiZtwo)) / self.phi
+        elif self.KiZ.shape[1] == 1:
+            d2llik -= 0.5 * self.n * float(self.KiZ.T @ KiZtwo) / self.phi
+        else:
+            d2llik -= 0.5 * self.n * (self.KiZ @ KiZtwo) / self.phi
         
         # Calculate third part of derivatives
-        # KiZtwo = dK @ KiZ
         KiZtwo = self.dK @ self.KiZ
-        phirat = (self.KiZ @ KiZtwo) / self.phi
+        
+        if self.KiZ.ndim == 1:
+            phirat = (self.KiZ.dot(KiZtwo)) / self.phi
+        elif self.KiZ.shape[1] == 1:
+            phirat = float(self.KiZ.T @ KiZtwo) / self.phi
+        else:
+            phirat = (self.KiZ @ KiZtwo) / self.phi
         
         d2llik += 0.5 * self.n * phirat * phirat
         dllik += 0.5 * self.n * phirat
@@ -551,7 +562,15 @@ class GP:
         # Update phi = Z^T Ki Z
         if self.Z is not None:
             self.KiZ = self.Ki @ self.Z
-            self.phi = self.Z @ self.KiZ
+            if self.Z.ndim == 1:
+                # For 1D arrays, use dot product
+                self.phi = self.Z.dot(self.KiZ)
+            elif self.Z.shape[1] == 1:
+                # For column vectors (n,1), transpose the first one
+                self.phi = float(self.Z.T @ self.KiZ)
+            else:
+                # For other 2D arrays
+                self.phi = self.Z @ self.KiZ
 
         # Calculate derivatives and Fisher info if needed
         if self.dK is not None:
@@ -738,9 +757,7 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
         
     Returns:
         New GP instance
-    """
-    n, m = X.shape
-    
+    """    
     # Calculate covariance matrix
     K = covar_symm(X, d, g)
     
@@ -753,7 +770,12 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
     KiZ = Ki @ Z
     
     # Calculate phi
-    phi = Z @ KiZ
+    if Z.ndim == 1:
+        phi = Z.dot(KiZ)
+    elif Z.shape[1] == 1:
+        phi = Z.T @ KiZ
+    else:
+        phi = Z @ KiZ
     
     gp = GP(X=X, K=K, Ki=Ki, Z=Z, KiZ=KiZ, 
             ldetK=ldetK, d=d, g=g, phi=phi)

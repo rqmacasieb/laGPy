@@ -8,8 +8,6 @@ Z = np.sin(X[:, 0]) + np.cos(X[:, 1]) + 0.1 * np.random.randn(1000)
 Xref = np.random.rand(1, 20)
 start_time = time.time()
 
-
-
 # Create and fit LaGP model
 gp = laGPy.buildGP(X, Z,  verb=1)
 

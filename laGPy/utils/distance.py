@@ -17,9 +17,9 @@ def distance(X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
         ValueError: If input dimensions don't match
     """
     if X1.ndim == 1:
-        X1 = X1.reshape(1, -1)
+        X1 = X1.reshape(-1, 1)
     if X2.ndim == 1:
-        X2 = X2.reshape(1, -1)
+        X2 = X2.reshape(-1, 1)
 
     # Coerce arguments and extract dimensions
     X1_norm = np.sum(X1**2, axis=1)[:, np.newaxis]

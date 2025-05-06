@@ -13,8 +13,6 @@ sims = laGPy.laGP(
     Z=Z,                   # Output value
     start=10,               # Initial points
     end=20,                # Total points to select
-    d = 1,
-    g = 0.01,
     verb=1                # Show optimization progress
 )
 
