@@ -1,4 +1,5 @@
 import unittest
+import pandas as pd
 from laGPy import laGP, Method, buildGP, loadGP, fullGP, newGP, updateGP
 import numpy as np
 
