@@ -33,4 +33,4 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest test_lagpy.py -v
+        pytest tests/test_lagpy.py -v
