@@ -24,9 +24,9 @@ def fullGP(Xref: np.ndarray,
         g: float = 1/10000,
         lite: bool = True,
         verb: int = 0,
-        compute_derivatives: bool = False) -> Dict:
+        compute_gradients: bool = False) -> Dict:
     """
-    GP prediction utilizing full training dataset with optional analytical derivatives
+    GP prediction utilizing full training dataset
 
     Args:
         Xref: Reference points for prediction
@@ -36,7 +36,7 @@ def fullGP(Xref: np.ndarray,
         g: Nugget parameter
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
-        compute_derivatives: If True, include derivatives in the output
+        compute_gradients: If True, include gradients in the output
         
     Returns:
         Dictionary with the following keys:
@@ -46,16 +46,16 @@ def fullGP(Xref: np.ndarray,
             llik: Log likelihood
             d_posterior: Posterior lengthscale parameter
             g_posterior: Posterior nugget parameter
-            dmean: Derivatives of mean predictions w.r.t. inputs (if compute_derivatives=True)
-            ds2: Derivatives of variance predictions w.r.t. inputs (if compute_derivatives=True)
+            dmean: Gradients of mean predictions w.r.t. inputs (if compute_gradients=True)
+            ds2: Gradients of variance predictions w.r.t. inputs (if compute_gradients=True)
     """
 
     gp = buildGP(X, Z, d, g, export=False, verb=verb)
 
     if lite:
-        results = gp.predict_lite(Xref, compute_derivatives=compute_derivatives)
+        results = gp.predict_lite(Xref, compute_gradients=compute_gradients)
     else:
-        results = gp.predict(Xref, compute_derivatives=compute_derivatives)
+        results = gp.predict(Xref, compute_gradients=compute_gradients)
 
     result = {
         "mean": results["mean"],
@@ -66,7 +66,7 @@ def fullGP(Xref: np.ndarray,
         "g_posterior": gp.g,
     }
     
-    if compute_derivatives:
+    if compute_gradients:
         result["dmean"] = results["dmean"]
         result["ds2"] = results["ds2"]
     
@@ -85,7 +85,7 @@ def _laGP(Xref: np.ndarray,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
          verb: int = 0,
-         compute_derivatives: bool = False) -> Dict:
+         compute_gradients: bool = False) -> Dict:
     """
     Local Approximate GP prediction with parameter estimation
     
@@ -103,7 +103,7 @@ def _laGP(Xref: np.ndarray,
         rect: Optional rectangle bounds
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
-        compute_derivatives: Whether to compute analytical derivatives of predictions
+        compute_gradients: Whether to compute analytical gradients of predictions
         
     Returns:
         Tuple of:
@@ -112,8 +112,8 @@ def _laGP(Xref: np.ndarray,
         - Selected indices
         - Final length scale
         - Final nugget
-        - Derivatives of mean predictions w.r.t. inputs (only if compute_derivatives=True)
-        - Derivatives of variance predictions w.r.t. inputs (only if compute_derivatives=True)
+        - Gradients of mean predictions w.r.t. inputs (only if compute_gradients=True)
+        - Gradients of variance predictions w.r.t. inputs (only if compute_gradients=True)
     """
     n = X.shape[0]
     # Get closest points for initial design
@@ -192,11 +192,11 @@ def _laGP(Xref: np.ndarray,
     optimize_parameters(gp, d, g, verb)
     
     # Given the updated gp, predict values and return results
-    if compute_derivatives:
+    if compute_gradients:
         if lite:
-            results = gp.predict_lite(Xref, compute_derivatives=True)
+            results = gp.predict_lite(Xref, compute_gradients=True)
         else:
-            results = gp.predict(Xref, compute_derivatives=True)
+            results = gp.predict(Xref, compute_gradients=True)
         
         return {
             "mean": results["mean"],
@@ -238,7 +238,7 @@ def laGP(Xref: np.ndarray,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
          verb: int = 0,
-         compute_derivatives: bool = False) -> Dict:
+         compute_gradients: bool = False) -> Dict:
     """
     Local Approximate Gaussian Process Regression.
     Combined Python equivalent of laGP.R and laGP_R.c
@@ -257,7 +257,7 @@ def laGP(Xref: np.ndarray,
         rect: Rectangle bounds for ray-based methods
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
-        compute_derivatives: Whether to compute analytical derivatives of predictions
+        compute_gradients: Whether to compute analytical gradients of predictions
         
     Returns:
         Dictionary containing:
@@ -271,8 +271,8 @@ def laGP(Xref: np.ndarray,
             g: Nugget parameters
             close: Number of close points used
             selected: Selected indices (zero-indexed)
-            dmean: Derivatives of mean predictions w.r.t. inputs (only if compute_derivatives=True)
-            ds2: Derivatives of variance predictions w.r.t. inputs (only if compute_derivatives=True)
+            dmean: Gradients of mean predictions w.r.t. inputs (only if compute_gradients=True)
+            ds2: Gradients of variance predictions w.r.t. inputs (only if compute_gradients=True)
     """
     if isinstance(method, Method):
         method = method.name.lower()
@@ -353,7 +353,7 @@ def laGP(Xref: np.ndarray,
             rect=rect,
             verb=verb,
             lite=lite,
-            compute_derivatives=compute_derivatives
+            compute_gradients=compute_gradients
         )
 
         result = {
@@ -369,12 +369,12 @@ def laGP(Xref: np.ndarray,
             'close': close
         }
         
-        if compute_derivatives:
+        if compute_gradients:
             result['dmean'] = results['dmean']
             result['ds2'] = results['ds2']
     elif (start is None and end is None) or end >= n: #full GP implementation
-        if compute_derivatives:
-            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, compute_derivatives=True)
+        if compute_gradients:
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, compute_gradients=True)
         else:
             results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
         
@@ -388,7 +388,7 @@ def laGP(Xref: np.ndarray,
             'g': results['g_posterior'],
         }
         
-        if compute_derivatives:
+        if compute_gradients:
             result['dmean'] = results['dmean']
             result['ds2'] = results['ds2']
     else:
