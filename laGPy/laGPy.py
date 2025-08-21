@@ -23,7 +23,8 @@ def fullGP(Xref: np.ndarray,
         d: Optional[Union[float, Tuple[float, float]]] = None,
         g: float = 1/10000,
         lite: bool = True,
-        verb: int = 0) -> Dict:
+        verb: int = 0,
+        compute_gradients: bool = False) -> Dict:
     """
     GP prediction utilizing full training dataset
 
@@ -35,25 +36,28 @@ def fullGP(Xref: np.ndarray,
         g: Nugget parameter
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
+        compute_gradients: If True, include gradients in the output
         
     Returns:
         Dictionary with the following keys:
             mean: Predicted means
-            var: Predicted variances
+            s2: Predicted variances
             df: Degrees of freedom
             llik: Log likelihood
             d_posterior: Posterior lengthscale parameter
             g_posterior: Posterior nugget parameter
+            dmean: Gradients of mean predictions w.r.t. inputs (if compute_gradients=True)
+            ds2: Gradients of variance predictions w.r.t. inputs (if compute_gradients=True)
     """
 
     gp = buildGP(X, Z, d, g, export=False, verb=verb)
 
     if lite:
-        results = gp.predict_lite(Xref)
+        results = gp.predict_lite(Xref, compute_gradients=compute_gradients)
     else:
-        results = gp.predict(Xref)
+        results = gp.predict(Xref, compute_gradients=compute_gradients)
 
-    return {
+    result = {
         "mean": results["mean"],
         "s2": results["s2"],
         "df": results["df"],
@@ -61,7 +65,12 @@ def fullGP(Xref: np.ndarray,
         "d_posterior": gp.d,
         "g_posterior": gp.g,
     }
-
+    
+    if compute_gradients:
+        result["dmean"] = results["dmean"]
+        result["ds2"] = results["ds2"]
+    
+    return result
 
 def _laGP(Xref: np.ndarray, 
          X: np.ndarray, 
@@ -75,7 +84,8 @@ def _laGP(Xref: np.ndarray,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
-         verb: int = 0) -> Dict:
+         verb: int = 0,
+         compute_gradients: bool = False) -> Dict:
     """
     Local Approximate GP prediction with parameter estimation
     
@@ -93,6 +103,7 @@ def _laGP(Xref: np.ndarray,
         rect: Optional rectangle bounds
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
+        compute_gradients: Whether to compute analytical gradients of predictions
         
     Returns:
         Tuple of:
@@ -101,6 +112,8 @@ def _laGP(Xref: np.ndarray,
         - Selected indices
         - Final length scale
         - Final nugget
+        - Gradients of mean predictions w.r.t. inputs (only if compute_gradients=True)
+        - Gradients of variance predictions w.r.t. inputs (only if compute_gradients=True)
     """
     n = X.shape[0]
     # Get closest points for initial design
@@ -179,20 +192,38 @@ def _laGP(Xref: np.ndarray,
     optimize_parameters(gp, d, g, verb)
     
     # Given the updated gp, predict values and return results
-    if lite:
-        results = gp.predict_lite(Xref)
+    if compute_gradients:
+        if lite:
+            results = gp.predict_lite(Xref, compute_gradients=True)
+        else:
+            results = gp.predict(Xref, compute_gradients=True)
+        
+        return {
+            "mean": results["mean"],
+            "s2": results["s2"],
+            "df": results["df"],
+            "llik": results["llik"],
+            "selected": selected,
+            "d_posterior": gp.d,
+            "g_posterior": gp.g,
+            "dmean": results["dmean"],
+            "ds2": results["ds2"],
+        }
     else:
-        results = gp.predict(Xref)
-    
-    return {
-        "mean": results["mean"],
-        "s2": results["s2"],
-        "df": results["df"],
-        "llik": results["llik"],
-        "selected": selected,
-        "d_posterior": gp.d,
-        "g_posterior": gp.g,
-    }
+        if lite:
+            results = gp.predict_lite(Xref)
+        else:
+            results = gp.predict(Xref)
+        
+        return {
+            "mean": results["mean"],
+            "s2": results["s2"],
+            "df": results["df"],
+            "llik": results["llik"],
+            "selected": selected,
+            "d_posterior": gp.d,
+            "g_posterior": gp.g,
+        }
 
 def laGP(Xref: np.ndarray, 
          X: np.ndarray, 
@@ -206,7 +237,8 @@ def laGP(Xref: np.ndarray,
          numstart: Optional[int] = None,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
-         verb: int = 0) -> Dict:
+         verb: int = 0,
+         compute_gradients: bool = False) -> Dict:
     """
     Local Approximate Gaussian Process Regression.
     Combined Python equivalent of laGP.R and laGP_R.c
@@ -225,6 +257,7 @@ def laGP(Xref: np.ndarray,
         rect: Rectangle bounds for ray-based methods
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
+        compute_gradients: Whether to compute analytical gradients of predictions
         
     Returns:
         Dictionary containing:
@@ -238,19 +271,19 @@ def laGP(Xref: np.ndarray,
             g: Nugget parameters
             close: Number of close points used
             selected: Selected indices (zero-indexed)
+            dmean: Gradients of mean predictions w.r.t. inputs (only if compute_gradients=True)
+            ds2: Gradients of variance predictions w.r.t. inputs (only if compute_gradients=True)
     """
     if isinstance(method, Method):
         method = method.name.lower()
     else:
         method = method.lower()
 
-    # Method mapping
     method_map = {
         "alc": Method.ALC, "alcopt": Method.ALCOPT, "alcray": Method.ALCRAY,
         "mspe": Method.MSPE, "fish": Method.EFI, "nn": Method.NN
     }
-    
-    # Input processing
+
     if method not in method_map:
         raise ValueError(f"Unknown method: {method}")
     imethod = method_map[method]
@@ -274,26 +307,27 @@ def laGP(Xref: np.ndarray,
         if start < 6 or end <= start:
             raise ValueError("must have 6 <= start < end")
         if end is None:
-            print("WARNING: Target design size is not provided. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            if (verb > 0):
+                print("WARNING: Target design size is not provided. Using full training design for GP (i.e., NOT a local approximate GP!)")
         elif end > n:
-            print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
-                  f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            if (verb > 0):
+                print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
+                      f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
             end = n
         elif end == n:
-            print(f"WARNING: Target design size = {end} is equal to training design size = {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            if (verb > 0):
+                print(f"WARNING: Target design size = {end} is equal to training design size = {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
     if Xref.shape[1] != m:
         raise ValueError(f"Dimension mismatch: Xref.shape = {Xref.shape}, X.shape = {X.shape}")
     if len(Z) != n:
         raise ValueError("Length of Z must match number of rows in X")
     
-    # Set defaults
     if close is None:
         mult = 10 if method in ["alcray", "alcopt"] else 1
         close = min((1000 + end) * mult, n)
     if numstart is None:
         numstart = m if method == "alcray" else 1
     
-    # Process rect
     if method in ["alcray", "alcopt"]:
         if rect is None:
             rect = np.zeros((2, m))
@@ -306,7 +340,6 @@ def laGP(Xref: np.ndarray,
     d_prior = darg(d, X)
     g_prior = garg(g, Z)
     
-    # Start timing
     tic = time.time()
     
     # Call core implementation
@@ -319,7 +352,8 @@ def laGP(Xref: np.ndarray,
             numstart=numstart,
             rect=rect,
             verb=verb,
-            lite=lite
+            lite=lite,
+            compute_gradients=compute_gradients
         )
 
         result = {
@@ -334,8 +368,16 @@ def laGP(Xref: np.ndarray,
             'g': results['g_posterior'],
             'close': close
         }
+        
+        if compute_gradients:
+            result['dmean'] = results['dmean']
+            result['ds2'] = results['ds2']
     elif (start is None and end is None) or end >= n: #full GP implementation
-        results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
+        if compute_gradients:
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, compute_gradients=True)
+        else:
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
+        
         result = {
             'mean': results['mean'],
             's2': results['s2'],
@@ -345,6 +387,10 @@ def laGP(Xref: np.ndarray,
             'd': results['d_posterior'],
             'g': results['g_posterior'],
         }
+        
+        if compute_gradients:
+            result['dmean'] = results['dmean']
+            result['ds2'] = results['ds2']
     else:
         raise ValueError("start and end must be provided if start or end is not None")
     
@@ -478,7 +524,4 @@ def calc_alc(m, ktKik, s2p, phi, tdf, badj=None, w=None):
     else:
         alc = ts2 * dfrat
 
-    return alc 
-
-
-
+    return alc

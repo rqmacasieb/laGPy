@@ -105,5 +105,63 @@ class TestLaGPy(unittest.TestCase):
             assert abs(sim['s2'].item() - val_s2)**2 < 1e-10
     
 
+    def test_gradient_calcs(self):
+        def test_function_2d(x):
+            x1, x2 = x[0], x[1]
+            return np.sin(2 * np.pi * x1) * np.cos(np.pi * x2)
+
+        def true_gradients(x):
+            x1, x2 = x[0], x[1]
+            df_dx1 = 2 * np.pi * np.cos(2 * np.pi * x1) * np.cos(np.pi * x2)
+            df_dx2 = -np.pi * np.sin(2 * np.pi * x1) * np.sin(np.pi * x2)
+            return np.array([df_dx1, df_dx2])
+
+        def finite_difference_gradients(X, X_train, Z_train, h=1e-8):
+            X_plus_x1 = X.copy()
+            X_minus_x1 = X.copy()
+            X_plus_x2 = X.copy()
+            X_minus_x2 = X.copy()
+            
+            X_plus_x1[0, 0] += h
+            X_minus_x1[0, 0] -= h
+            X_plus_x2[0, 1] += h
+            X_minus_x2[0, 1] -= h
+            
+            # Get GP predictions at perturbed points
+            gp_plus_x1 = laGP(Xref=X_plus_x1, X=X_train, Z=Z_train, start=20, end=40, method="alc")
+            gp_minus_x1 = laGP(Xref=X_minus_x1, X=X_train, Z=Z_train, start=20, end=40, method="alc")
+            gp_plus_x2 = laGP(Xref=X_plus_x2, X=X_train, Z=Z_train, start=20, end=40, method="alc")
+            gp_minus_x2 = laGP(Xref=X_minus_x2, X=X_train, Z=Z_train, start=20, end=40, method="alc")
+            
+            # Compute finite differences
+            df_dx1 = (gp_plus_x1['mean'][0] - gp_minus_x1['mean'][0]) / (2 * h)
+            df_dx2 = (gp_plus_x2['mean'][0] - gp_minus_x2['mean'][0]) / (2 * h)
+            
+            return np.array([df_dx1, df_dx2])
+
+        np.random.seed(42)
+        n_train = 500
+        X_train = np.random.uniform(0, 1, (n_train, 2))
+        Z_train = np.array([test_function_2d(x) for x in X_train]) 
+
+        # Test point
+        X_test = np.array([[0.3, 0.7]])
+        
+        results = laGP(Xref=X_test, X=X_train, Z=Z_train, 
+                       start=20, end=40, method="alc", 
+                       compute_gradients=True)
+
+        assert 'dmean' in results
+
+        gp_grads = results['dmean'][0]
+        true_grads = true_gradients(X_test[0])
+        fd_grads = finite_difference_gradients(X_test, X_train, Z_train)
+
+        assert abs(gp_grads[0] - true_grads[0]) < 1e-2
+        assert abs(gp_grads[1] - true_grads[1]) < 1e-3
+        assert abs(gp_grads[0] - fd_grads[0]) < 1e-3
+        assert abs(gp_grads[1] - fd_grads[1]) < 1e-4
+
+
 if __name__ == '__main__':
     unittest.main()
