@@ -603,13 +603,14 @@ class GP:
         if verb > 0:
             print(f"Updated GP with new point(s). New n = {self.n}")
 
-    def predict_lite(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
+    def predict_lite(self, Xref: np.ndarray, nonug: bool = False, compute_derivatives: bool = False) -> Dict:
         """
-        Lightweight prediction at reference points (diagonal covariance only)
+        Lightweight prediction at reference points
         
         Args:
             Xref: Reference points for prediction
             nonug: If True, use minimal nugget instead of GP nugget
+            compute_derivatives: If True, include derivatives in the output
             
         Returns:
             Dictionary with the following keys:
@@ -617,38 +618,59 @@ class GP:
                 "s2": Variance predictions
                 "df": Degrees of freedom
                 "llik": Log likelihood
+                "dmean": Derivatives of mean predictions w.r.t. inputs (if compute_derivatives=True)
+                "ds2": Derivatives of variance predictions w.r.t. inputs (if compute_derivatives=True)
         """
-        # Set nugget
         g = np.sqrt(np.finfo(float).eps) if nonug else self.g
         
-        # Get prediction utilities
         k, ktKi, ktKik = self.new_predutilGP_lite(len(Xref), Xref)
         
-        # Calculate mean predictions
         mean = ktKi @ self.Z
         
-        # Calculate variance predictions
         df = float(self.n)
         phidf = self.phi / df
         var = phidf * (1.0 + g - ktKik)
         
-        # Calculate log likelihood
-        llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
-        
-        return {
+        result = {
             "mean": mean,
             "s2": var,
             "df": df,
-            "llik": llik
+            "llik": -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
         }
+        
+        if compute_derivatives:
+            nn = len(Xref)
+            m = self.m
+            
+            dmean = np.zeros((nn, m))
+            ds2 = np.zeros((nn, m))
+            
+            for i in range(nn):
+                for j in range(m):
+                    # Calculate ∂k/∂x_j for point i
+                    dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
+                    
+                    # ∂μ/∂x = ∂k/∂x @ Ki @ Z
+                    dmean[i, j] = dk_dx @ self.Ki @ self.Z
+                    
+                    # ∂σ²/∂x = -phidf * ∂(ktKik)/∂x
+                    # ∂(ktKik)/∂x = 2 * ∂k/∂x @ Ki @ k.T
+                    dktKik_dx = 2.0 * dk_dx @ self.Ki @ k[i:i+1].T
+                    ds2[i, j] = -phidf * dktKik_dx
+            
+            result["dmean"] = dmean
+            result["ds2"] = ds2
+        
+        return result
 
-    def predict(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
+    def predict(self, Xref: np.ndarray, nonug: bool = False, compute_derivatives: bool = False) -> Dict:
         """
-        Full prediction at reference points (full covariance matrix)
+        Full prediction at reference points
         
         Args:
             Xref: Reference points for prediction
             nonug: If True, use minimal nugget instead of GP nugget
+            compute_derivatives: If True, include derivatives in the output
             
         Returns:
             Dictionary with the following keys:
@@ -656,38 +678,50 @@ class GP:
                 "Sigma": Covariance predictions
                 "df": Degrees of freedom
                 "llik": Log likelihood
+                "dmean": Derivatives of mean predictions w.r.t. inputs (if compute_derivatives=True)
+                "ds2": Derivatives of variance predictions w.r.t. inputs (if compute_derivatives=True)
         """
         nn = len(Xref)
-    
-        # Set nugget
+        m = self.m  # number of input dimensions
+
         g = np.sqrt(np.finfo(float).eps) if nonug else self.g
         
-        # Initialize outputs
         mean = np.zeros(nn)
         Sigma = covar_symm(Xref, self.d, g)
         
         # Calculate covariance between training and test points
         k = covar(Xref, self.X, self.d)
         
-        # Calculate predictions using generic function
         df = float(self.n)
         phidf = self.phi / df
-        self.pred_generic(self.n, phidf, self.Z, self.Ki, nn, k, mean, Sigma)
         
-        # Calculate log likelihood
-        llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
-        
-        return {
+        if compute_derivatives:
+            dmean = np.zeros((nn, m))
+            ds2 = np.zeros((nn, m))
+            self.pred_generic(self.n, phidf, self.Z, self.Ki, nn, k, mean, Sigma, 
+                             compute_derivatives=True, Xref=Xref, dmean=dmean, ds2=ds2)
+        else:
+            self.pred_generic(self.n, phidf, self.Z, self.Ki, nn, k, mean, Sigma)
+
+        result = {
             "mean": mean,
             "Sigma": Sigma,
             "df": df,
-            "llik": llik
+            "llik": -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
         }
-    
+
+        if compute_derivatives:
+            result["dmean"] = dmean
+            result["ds2"] = ds2
+        
+        return result
+
     def pred_generic(self, n: int, phidf: float, Z: np.ndarray, Ki: np.ndarray, 
-                nn: int, k: np.ndarray, mean: np.ndarray, Sigma: np.ndarray) -> None:
+                 nn: int, k: np.ndarray, mean: np.ndarray, Sigma: np.ndarray,
+                 compute_derivatives: bool = False, Xref: np.ndarray = None,
+                 dmean: np.ndarray = None, ds2: np.ndarray = None) -> None:
         """
-        Generic prediction function shared between GP and GPsep objects.
+        Generic prediction function
         
         Args:
             n: Number of training points
@@ -698,16 +732,42 @@ class GP:
             k: Covariance between training and prediction points
             mean: Output array for mean predictions
             Sigma: Output array for covariance predictions
+            compute_derivatives: If True, compute derivatives
+            Xref: Reference points for prediction (needed for derivatives)
+            dmean: Output array for mean derivatives (if compute_derivatives=True)
+            ds2: Output array for variance derivatives (if compute_derivatives=True)
         """
         # Calculate ktKi = k.T @ Ki
         ktKi = k @ Ki
         
-        # Calculate mean predictions
+        # Calculate mean predictions: μ = k.T @ Ki @ Z
         mean[:] = ktKi @ Z
         
-        # Calculate covariance predictions
-        ktKik = ktKi @ k.T
-        Sigma[:] = phidf * (Sigma - ktKik)
+        # Calculate covariance predictions: Σ = K* - k.T @ Ki @ k
+        for i in range(nn):
+            Sigma[i, i] = 1.0 + phidf * (1.0 - ktKi[i, :] @ k[:, i])
+        
+        # Calculate derivatives if requested
+        if compute_derivatives and Xref is not None and dmean is not None and ds2 is not None:
+            m = self.m  # number of input dimensions
+            
+            # Calculate derivatives of mean: ∂μ/∂x = ∂k/∂x @ Ki @ Z
+            for i in range(nn):
+                for j in range(m):
+                    # Calculate ∂k/∂x_j for point i
+                    dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
+                    dmean[i, j] = dk_dx @ Ki @ Z
+            
+            # Calculate derivatives of variance: ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
+            for i in range(nn):
+                for j in range(m):
+                    dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
+                    dk_dx_T = dk_dx.T
+                    
+                    # ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
+                    term1 = dk_dx @ Ki @ k[i:i+1].T
+                    term2 = k[i:i+1] @ Ki @ dk_dx_T
+                    ds2[i, j] = 2.0 * phidf * (term1 - term2)
 
     def new_predutilGP_lite(self, nn: int, XX: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -743,181 +803,7 @@ class GP:
         F = 0.5 * np.trace(KidK @ KidK)
         return F
     
-    def predict_with_derivatives(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
-        """
-        Full prediction at reference points with analytical derivatives
-        
-        Args:
-            Xref: Reference points for prediction
-            nonug: If True, use minimal nugget instead of GP nugget
-            
-        Returns:
-            Dictionary with the following keys:
-                "mean": Mean predictions
-                "Sigma": Covariance predictions
-                "df": Degrees of freedom
-                "llik": Log likelihood
-                "dmean": Derivatives of mean predictions w.r.t. inputs
-                "ds2": Derivatives of variance predictions w.r.t. inputs
-        """
-        nn = len(Xref)
-        m = self.m  # number of input dimensions
-    
-        # Set nugget
-        g = np.sqrt(np.finfo(float).eps) if nonug else self.g
-        
-        # Initialize outputs
-        mean = np.zeros(nn)
-        Sigma = covar_symm(Xref, self.d, g)
-        dmean = np.zeros((nn, m))  # derivatives of mean w.r.t. each input dimension
-        ds2 = np.zeros((nn, m))    # derivatives of variance w.r.t. each input dimension
-        
-        # Calculate covariance between training and test points
-        k = covar(Xref, self.X, self.d)
-        
-        # Calculate predictions using generic function
-        df = float(self.n)
-        phidf = self.phi / df
-        self.pred_generic(self.n, phidf, self.Z, self.Ki, nn, k, mean, Sigma)
-        
-        # Calculate derivatives
-        self.pred_derivatives_generic(self.n, phidf, self.Z, self.Ki, nn, m, Xref, self.X, k, dmean, ds2)
-        
-        # Calculate log likelihood
-        llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
-        
-        return {
-            "mean": mean,
-            "Sigma": Sigma,
-            "df": df,
-            "llik": llik,
-            "dmean": dmean,
-            "ds2": ds2
-        }
-
-    def predict_lite_with_derivatives(self, Xref: np.ndarray, nonug: bool = False) -> Dict:
-        """
-        Lightweight prediction at reference points with analytical derivatives (diagonal covariance only)
-        
-        Args:
-            Xref: Reference points for prediction
-            nonug: If True, use minimal nugget instead of GP nugget
-            
-        Returns:
-            Dictionary with the following keys:
-                "mean": Mean predictions
-                "s2": Variance predictions
-                "df": Degrees of freedom
-                "llik": Log likelihood
-                "dmean": Derivatives of mean predictions w.r.t. inputs
-                "ds2": Derivatives of variance predictions w.r.t. inputs
-        """
-        # Set nugget
-        g = np.sqrt(np.finfo(float).eps) if nonug else self.g
-        
-        # Get prediction utilities
-        k, ktKi, ktKik = self.new_predutilGP_lite(len(Xref), Xref)
-        
-        # Calculate mean predictions
-        mean = ktKi @ self.Z
-        
-        # Calculate variance predictions
-        df = float(self.n)
-        phidf = self.phi / df
-        var = phidf * (1.0 + g - ktKik)
-        
-        # Calculate derivatives
-        dmean, ds2 = self.pred_derivatives_lite(Xref, k, ktKi, ktKik, phidf)
-        
-        # Calculate log likelihood
-        llik = -0.5 * (self.n * np.log(0.5 * self.phi) + self.ldetK)
-        
-        return {
-            "mean": mean,
-            "s2": var,
-            "df": df,
-            "llik": llik,
-            "dmean": dmean,
-            "ds2": ds2
-        }
-
-    def pred_derivatives_generic(self, n: int, phidf: float, Z: np.ndarray, Ki: np.ndarray, 
-                                nn: int, m: int, Xref: np.ndarray, X: np.ndarray, k: np.ndarray,
-                                dmean: np.ndarray, ds2: np.ndarray) -> None:
-        """
-        Generic prediction derivatives function.
-        
-        Args:
-            n: Number of training points
-            phidf: phi/df value
-            Z: Z values
-            Ki: Inverse covariance matrix
-            nn: Number of prediction points
-            m: Number of input dimensions
-            Xref: Reference points for prediction
-            X: Training points
-            k: Covariance between training and prediction points
-            dmean: Output array for mean derivatives
-            ds2: Output array for variance derivatives
-        """
-        # Calculate ktKi = k.T @ Ki
-        ktKi = k @ Ki
-        
-        # Calculate derivatives of mean: ∂μ/∂x = ∂k/∂x @ Ki @ Z
-        for i in range(nn):
-            for j in range(m):
-                # Calculate ∂k/∂x_j for point i
-                dk_dx = self._compute_dk_dx(Xref[i:i+1], X, j)
-                dmean[i, j] = dk_dx @ Ki @ Z
-        
-        # Calculate derivatives of variance: ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
-        for i in range(nn):
-            for j in range(m):
-                dk_dx = self._compute_dk_dx(Xref[i:i+1], X, j)
-                dk_dx_T = dk_dx.T
-                
-                # ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
-                term1 = dk_dx @ Ki @ k[i:i+1].T
-                term2 = k[i:i+1] @ Ki @ dk_dx_T
-                ds2[i, j] = 2.0 * phidf * (term1 - term2)
-
-    def pred_derivatives_lite(self, Xref: np.ndarray, k: np.ndarray, ktKi: np.ndarray, 
-                             ktKik: np.ndarray, phidf: float) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Lightweight prediction derivatives (diagonal covariance only).
-        
-        Args:
-            Xref: Reference points for prediction
-            k: Covariance between training and prediction points
-            ktKi: k.T @ Ki
-            ktKik: Diagonal of ktKi @ k
-            phidf: phi/df value
-            
-        Returns:
-            Tuple of (dmean, ds2) - derivatives of mean and variance
-        """
-        nn = len(Xref)
-        m = self.m
-        
-        dmean = np.zeros((nn, m))
-        ds2 = np.zeros((nn, m))
-        
-        for i in range(nn):
-            for j in range(m):
-                # Calculate ∂k/∂x_j for point i
-                dk_dx = self._compute_dk_dx(Xref[i:i+1], self.X, j)
-                
-                # ∂μ/∂x = ∂k/∂x @ Ki @ Z
-                dmean[i, j] = dk_dx @ self.Ki @ self.Z
-                
-                # ∂σ²/∂x = -phidf * ∂(ktKik)/∂x
-                # ∂(ktKik)/∂x = 2 * ∂k/∂x @ Ki @ k.T
-                dktKik_dx = 2.0 * dk_dx @ self.Ki @ k[i:i+1].T
-                ds2[i, j] = -phidf * dktKik_dx
-        
-        return dmean, ds2
-
-    def _compute_dk_dx(self, x: np.ndarray, X: np.ndarray, dim: int) -> np.ndarray:
+    def compute_dk_dx(self, x: np.ndarray, X: np.ndarray, dim: int) -> np.ndarray:
         """
         Compute derivative of covariance vector k with respect to input dimension dim.
         
@@ -929,26 +815,15 @@ class GP:
         Returns:
             Derivative of covariance vector (1, n)
         """
-        # Calculate distances
+        # Calculate squared distances
         D = distance(x, X)
         
         # Calculate covariance
         k = np.exp(-D / self.d)
         
-        # Calculate derivative: ∂k/∂x_dim = -k * (x_dim - X_dim) / (d * D)
-        # Handle division by zero (when D = 0) with numerical stability
-        epsilon = 1e-10  # Small threshold for numerical stability
-        
-        # Create a safe distance array to avoid division by very small values
-        D_safe = np.maximum(D, epsilon)
-        
-        # Calculate the derivative with safe division
-        dk_dx = -k * (x[0, dim] - X[:, dim]) / (self.d * D_safe)
-        
-        # For points that are exactly at the same location, set derivative to 0
-        # This is mathematically correct as the derivative approaches 0 as D approaches 0
-        dk_dx[D < epsilon] = 0
-        
+        # Calculate derivative
+        dk_dx = -2 * k * (x[0, dim] - X[:, dim]) / self.d
+       
         return dk_dx
 
 def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float, 
@@ -1004,7 +879,6 @@ def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
     Returns:
         Updated GP instance
     """
-    # Concatenate new data with existing data
     gp.X = np.vstack([gp.X, X_new])
     gp.Z = np.concatenate([gp.Z, Z_new])
     
@@ -1026,7 +900,6 @@ def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
     gp.phi = gp.Z @ gp.KiZ
     
     return gp
-
 
 #these are placeholder functions for now. Will develop these later if needed.
 def mspe(gp: GP, Xcand: np.ndarray, Xref: np.ndarray, verb: int = 0) -> np.ndarray:

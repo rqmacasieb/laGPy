@@ -23,9 +23,10 @@ def fullGP(Xref: np.ndarray,
         d: Optional[Union[float, Tuple[float, float]]] = None,
         g: float = 1/10000,
         lite: bool = True,
-        verb: int = 0) -> Dict:
+        verb: int = 0,
+        compute_derivatives: bool = False) -> Dict:
     """
-    GP prediction utilizing full training dataset
+    GP prediction utilizing full training dataset with optional analytical derivatives
 
     Args:
         Xref: Reference points for prediction
@@ -35,25 +36,28 @@ def fullGP(Xref: np.ndarray,
         g: Nugget parameter
         lite: Whether to use lite version (only diagonal of covariance)
         verb: Verbosity level
+        compute_derivatives: If True, include derivatives in the output
         
     Returns:
         Dictionary with the following keys:
             mean: Predicted means
-            var: Predicted variances
+            s2: Predicted variances
             df: Degrees of freedom
             llik: Log likelihood
             d_posterior: Posterior lengthscale parameter
             g_posterior: Posterior nugget parameter
+            dmean: Derivatives of mean predictions w.r.t. inputs (if compute_derivatives=True)
+            ds2: Derivatives of variance predictions w.r.t. inputs (if compute_derivatives=True)
     """
 
     gp = buildGP(X, Z, d, g, export=False, verb=verb)
 
     if lite:
-        results = gp.predict_lite(Xref)
+        results = gp.predict_lite(Xref, compute_derivatives=compute_derivatives)
     else:
-        results = gp.predict(Xref)
+        results = gp.predict(Xref, compute_derivatives=compute_derivatives)
 
-    return {
+    result = {
         "mean": results["mean"],
         "s2": results["s2"],
         "df": results["df"],
@@ -61,57 +65,12 @@ def fullGP(Xref: np.ndarray,
         "d_posterior": gp.d,
         "g_posterior": gp.g,
     }
-
-
-def fullGP_with_derivatives(Xref: np.ndarray, 
-        X: np.ndarray, 
-        Z: np.ndarray, 
-        d: Optional[Union[float, Tuple[float, float]]] = None,
-        g: float = 1/10000,
-        lite: bool = True,
-        verb: int = 0) -> Dict:
-    """
-    GP prediction with derivatives utilizing full training dataset
-
-    Args:
-        Xref: Reference points for prediction
-        X: Training inputs
-        Z: Training outputs
-        d: Lengthscale parameter
-        g: Nugget parameter
-        lite: Whether to use lite version (only diagonal of covariance)
-        verb: Verbosity level
-        
-    Returns:
-        Dictionary with the following keys:
-            mean: Predicted means
-            var: Predicted variances
-            df: Degrees of freedom
-            llik: Log likelihood
-            d_posterior: Posterior lengthscale parameter
-            g_posterior: Posterior nugget parameter
-            dmean: Derivatives of mean predictions w.r.t. inputs
-            ds2: Derivatives of variance predictions w.r.t. inputs
-    """
-
-    gp = buildGP(X, Z, d, g, export=False, verb=verb)
-
-    if lite:
-        results = gp.predict_lite_with_derivatives(Xref)
-    else:
-        results = gp.predict_with_derivatives(Xref)
-
-    return {
-        "mean": results["mean"],
-        "s2": results["s2"],
-        "df": results["df"],
-        "llik": results["llik"],
-        "d_posterior": gp.d,
-        "g_posterior": gp.g,
-        "dmean": results["dmean"],
-        "ds2": results["ds2"],
-    }
-
+    
+    if compute_derivatives:
+        result["dmean"] = results["dmean"]
+        result["ds2"] = results["ds2"]
+    
+    return result
 
 def _laGP(Xref: np.ndarray, 
          X: np.ndarray, 
@@ -235,9 +194,9 @@ def _laGP(Xref: np.ndarray,
     # Given the updated gp, predict values and return results
     if compute_derivatives:
         if lite:
-            results = gp.predict_lite_with_derivatives(Xref)
+            results = gp.predict_lite(Xref, compute_derivatives=True)
         else:
-            results = gp.predict_with_derivatives(Xref)
+            results = gp.predict(Xref, compute_derivatives=True)
         
         return {
             "mean": results["mean"],
@@ -320,13 +279,11 @@ def laGP(Xref: np.ndarray,
     else:
         method = method.lower()
 
-    # Method mapping
     method_map = {
         "alc": Method.ALC, "alcopt": Method.ALCOPT, "alcray": Method.ALCRAY,
         "mspe": Method.MSPE, "fish": Method.EFI, "nn": Method.NN
     }
-    
-    # Input processing
+
     if method not in method_map:
         raise ValueError(f"Unknown method: {method}")
     imethod = method_map[method]
@@ -353,8 +310,9 @@ def laGP(Xref: np.ndarray,
             if (verb > 0):
                 print("WARNING: Target design size is not provided. Using full training design for GP (i.e., NOT a local approximate GP!)")
         elif end > n:
-            print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
-                  f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
+            if (verb > 0):
+                print(f"WARNING: Target design size = {end} is greater than training design size = {n}.\n"
+                      f"Setting target design size to {n}. Using full training design for GP (i.e., NOT a local approximate GP!)")
             end = n
         elif end == n:
             if (verb > 0):
@@ -364,14 +322,12 @@ def laGP(Xref: np.ndarray,
     if len(Z) != n:
         raise ValueError("Length of Z must match number of rows in X")
     
-    # Set defaults
     if close is None:
         mult = 10 if method in ["alcray", "alcopt"] else 1
         close = min((1000 + end) * mult, n)
     if numstart is None:
         numstart = m if method == "alcray" else 1
     
-    # Process rect
     if method in ["alcray", "alcopt"]:
         if rect is None:
             rect = np.zeros((2, m))
@@ -384,7 +340,6 @@ def laGP(Xref: np.ndarray,
     d_prior = darg(d, X)
     g_prior = garg(g, Z)
     
-    # Start timing
     tic = time.time()
     
     # Call core implementation
@@ -414,13 +369,12 @@ def laGP(Xref: np.ndarray,
             'close': close
         }
         
-        # Add derivatives if computed
         if compute_derivatives:
             result['dmean'] = results['dmean']
             result['ds2'] = results['ds2']
     elif (start is None and end is None) or end >= n: #full GP implementation
         if compute_derivatives:
-            results = fullGP_with_derivatives(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, compute_derivatives=True)
         else:
             results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
         
@@ -434,7 +388,6 @@ def laGP(Xref: np.ndarray,
             'g': results['g_posterior'],
         }
         
-        # Add derivatives if computed
         if compute_derivatives:
             result['dmean'] = results['dmean']
             result['ds2'] = results['ds2']
