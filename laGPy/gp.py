@@ -653,8 +653,8 @@ class GP:
                     dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
                     
                     # ∂μ/∂x = ∂k/∂x @ Ki @ Z
-                    result = dk_dx @ self.Ki @ self.Z
-                    dmean[i, j] = float(np.asarray(result).item())
+                    grad_value = dk_dx @ self.Ki @ self.Z
+                    dmean[i, j] = float(np.asarray(grad_value).item())
                     
                     # ∂σ²/∂x = -phidf * ∂(ktKik)/∂x
                     # ∂(ktKik)/∂x = 2 * ∂k/∂x @ Ki @ k.T
@@ -771,7 +771,7 @@ class GP:
                     # ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
                     term1 = dk_dx @ Ki @ k[i:i+1].T
                     term2 = k[i:i+1] @ Ki @ dk_dx_T
-                    
+
                     result = 2.0 * phidf * (term1 - term2)
                     ds2[i, j] = float(np.asarray(result).item())
 
