@@ -852,17 +852,15 @@ class GP:
             sqrt3 = np.sqrt(3)
             sqrt3_D_d = sqrt3 * D / self.d
             k = (1 + sqrt3_D_d) * np.exp(-sqrt3_D_d)
-            D_safe = np.maximum(D, np.finfo(float).eps)
-            dk_dx = -3 * x_diff * np.exp(-sqrt3_D_d) / (self.d**2 * D_safe)
+            dk_dx = -3 * x_diff * np.exp(-sqrt3_D_d) / self.d**2
             
         elif self.kernel == 'matern52':
             # k = (1 + √5*r/d + 5*r²/(3*d²)) * exp(-√5*r/d)
-            # dk/dx = -5 * (x - x') * (1 + √5*r/d) * exp(-√5*r/d) / (3*d²*r)
+            # dk/dx = -5 * (x - x') * (1 + √5*r/d) * exp(-√5*r/d) / (3*d²)
             sqrt5 = np.sqrt(5)
             sqrt5_D_d = sqrt5 * D / self.d
             k = (1 + sqrt5_D_d + 5 * D**2 / (3 * self.d**2)) * np.exp(-sqrt5_D_d)
-            D_safe = np.maximum(D, np.finfo(float).eps)
-            dk_dx = -5 * x_diff * (1 + sqrt5_D_d) * np.exp(-sqrt5_D_d) / (3 * self.d**2 * D_safe)
+            dk_dx = -5 * x_diff * (1 + sqrt5_D_d) * np.exp(-sqrt5_D_d) / (3 * self.d**2)
         else:
             raise ValueError(f"Unknown kernel type: {self.kernel}")
        

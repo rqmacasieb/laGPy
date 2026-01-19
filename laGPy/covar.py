@@ -120,27 +120,15 @@ def diff_covar_symm(X: np.ndarray, d: float, kernel: KernelType = 'squared_expon
         sqrt3 = np.sqrt(3)
         sqrt3_D_d = sqrt3 * D / d
         exp_term = np.exp(-sqrt3_D_d)
-        
-        dK = np.where(mask, sqrt3 * D * (1 + sqrt3_D_d) * exp_term / d2, 0)
-        
-        d2K = np.where(mask, sqrt3 * D * exp_term * (sqrt3 * (D - 2*d) + sqrt3_D_d * (sqrt3 * D - 2*d)) / (d2 * d), 0)
+        dK = np.where(mask, 3 * D**2 * exp_term / (d**3), 0)
+        d2K = np.where(mask, 3 * D**2 * exp_term * (sqrt3_D_d - 3) / (d**4), 0)
     elif kernel == 'matern52':
         sqrt5 = np.sqrt(5)
         sqrt5_D_d = sqrt5 * D / d
         D2_d2 = D**2 / d2
         exp_term = np.exp(-sqrt5_D_d)
-        
-        coeff1 = 1 + sqrt5_D_d + 5 * D2_d2 / 3
-        dK = np.where(mask,
-                      sqrt5 * D * exp_term * (sqrt5 / d + 10 * D / (3 * d2)) / d + 
-                      coeff1 * sqrt5 * D * exp_term / d2,
-                      0)
-                      
-        dK_term = sqrt5 * D * exp_term / d2
-        d2K = np.where(mask,
-                       dK_term * (sqrt5 * (D - 2*d) / d + 10 * (D - d) / (3 * d)) +
-                       coeff1 * sqrt5 * D * exp_term * (sqrt5 * (D - 2*d)) / (d2 * d),
-                       0)
+        dK = np.where(mask, 5 * D**2 * (1 + sqrt5_D_d) * exp_term / (3 * d**3), 0)
+        d2K = np.where(mask, 5 * D**2 * exp_term / (3 * d**4) * (5 * D**2 / d**2 - 3 * (1 + sqrt5_D_d)), 0)
     else:
         raise ValueError(f"Unknown kernel type: {kernel}")  
     
