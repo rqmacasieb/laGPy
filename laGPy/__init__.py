@@ -44,5 +44,6 @@ __all__ = [
     'fullGP',
     'newGP',
     'updateGP',
-    '__version__'
+    '__version__',
+    'KernelType'
 ]

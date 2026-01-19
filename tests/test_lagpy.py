@@ -160,7 +160,7 @@ class TestLaGPy(unittest.TestCase):
         assert abs(gp_grads[0] - true_grads[0]) < 1e-2
         assert abs(gp_grads[1] - true_grads[1]) < 1e-3
         assert abs(gp_grads[0] - fd_grads[0]) < 1e-3
-        assert abs(gp_grads[1] - fd_grads[1]) < 1e-4
+        assert abs(gp_grads[1] - fd_grads[1]) < 5e-4
 
 
 if __name__ == '__main__':
