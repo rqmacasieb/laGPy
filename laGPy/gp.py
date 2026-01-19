@@ -653,12 +653,13 @@ class GP:
                     dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
                     
                     # ∂μ/∂x = ∂k/∂x @ Ki @ Z
-                    dmean[i, j] = dk_dx @ self.Ki @ self.Z
+                    result = dk_dx @ self.Ki @ self.Z
+                    dmean[i, j] = float(np.asarray(result).item())
                     
                     # ∂σ²/∂x = -phidf * ∂(ktKik)/∂x
                     # ∂(ktKik)/∂x = 2 * ∂k/∂x @ Ki @ k.T
                     dktKik_dx = 2.0 * dk_dx @ self.Ki @ k[i:i+1].T
-                    ds2[i, j] = -phidf * dktKik_dx
+                    ds2[i, j] = float(np.asarray(-phidf * dktKik_dx).item())
             
             result["dmean"] = dmean
             result["ds2"] = ds2
@@ -758,7 +759,8 @@ class GP:
                 for j in range(m):
                     # Calculate ∂k/∂x_j for point i
                     dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
-                    dmean[i, j] = dk_dx @ Ki @ Z
+                    result = dk_dx @ Ki @ Z
+                    dmean[i, j] = float(np.asarray(result).item())
             
             # Calculate derivatives of variance: ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
             for i in range(nn):
@@ -769,7 +771,9 @@ class GP:
                     # ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
                     term1 = dk_dx @ Ki @ k[i:i+1].T
                     term2 = k[i:i+1] @ Ki @ dk_dx_T
-                    ds2[i, j] = 2.0 * phidf * (term1 - term2)
+                    
+                    result = 2.0 * phidf * (term1 - term2)
+                    ds2[i, j] = float(np.asarray(result).item())
 
     def new_predutilGP_lite(self, nn: int, XX: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -818,12 +822,16 @@ class GP:
             Derivative of covariance vector (1, n)
         """
         from .utils.distance import distance
-        
+
         # Calculate squared distances
         D_sq = distance(x, X)  # Returns squared distances
         D = np.sqrt(np.maximum(D_sq, 0))  # Euclidean distances
         
-        x_diff = x[0, dim] - X[:, dim] 
+        if D_sq.ndim == 2:
+            D_sq = D_sq[0, :]  
+            D = D[0, :] if D.ndim == 2 else D
+        
+        x_diff = x[0, dim] - X[:, dim]
         
         if self.kernel == 'squared_exponential':
             # k = exp(-||x-x'||²/d)
@@ -858,7 +866,7 @@ class GP:
         else:
             raise ValueError(f"Unknown kernel type: {self.kernel}")
        
-        return dk_dx
+        return np.atleast_1d(dk_dx).flatten()
 
 def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float, kernel: KernelType = 'squared_exponential',
            compute_derivs: bool = False) -> GP:
