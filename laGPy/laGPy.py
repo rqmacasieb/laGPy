@@ -7,6 +7,7 @@ from .covar import *
 from .params import *
 import time
 from .utils.distance import *
+from .covar import KernelType
 
 class Method(Enum):
     ALC = 1
@@ -24,6 +25,7 @@ def fullGP(Xref: np.ndarray,
         g: float = 1/10000,
         lite: bool = True,
         verb: int = 0,
+        kernel: KernelType = 'squared_exponential',
         compute_gradients: bool = False) -> Dict:
     """
     GP prediction utilizing full training dataset
@@ -50,7 +52,7 @@ def fullGP(Xref: np.ndarray,
             ds2: Gradients of variance predictions w.r.t. inputs (if compute_gradients=True)
     """
 
-    gp = buildGP(X, Z, d, g, export=False, verb=verb)
+    gp = buildGP(X, Z, d, g, export=False, verb=verb, kernel=kernel)
 
     if lite:
         results = gp.predict_lite(Xref, compute_gradients=compute_gradients)
@@ -85,6 +87,7 @@ def _laGP(Xref: np.ndarray,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
          verb: int = 0,
+         kernel: KernelType = 'squared_exponential',
          compute_gradients: bool = False) -> Dict:
     """
     Local Approximate GP prediction with parameter estimation
@@ -123,7 +126,7 @@ def _laGP(Xref: np.ndarray,
     if method == Method.NN:
         if verb > 0:
             print(f"NN method selected. Using {end} nearest points from the training set.")
-        gp = newGP(X[idx[:end]], Z[idx[:end]], get_value(d, 'start'), get_value(g, 'start'))
+        gp = newGP(X[idx[:end]], Z[idx[:end]], get_value(d, 'start'), get_value(g, 'start'), kernel=kernel)
         selected = idx[:end]
     
     else: 
@@ -137,7 +140,7 @@ def _laGP(Xref: np.ndarray,
         X_init = X[idx[:start]]
         Z_init = Z[idx[:start]]
         
-        gp = newGP(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'))
+        gp = newGP(X_init, Z_init, get_value(d, 'start'), get_value(g, 'start'), kernel=kernel)
         
         # Get rect bounds if needed
         if method in (Method.ALCRAY, Method.ALCOPT) and rect is None:
@@ -238,6 +241,7 @@ def laGP(Xref: np.ndarray,
          rect: Optional[np.ndarray] = None,
          lite: bool = True,
          verb: int = 0,
+         kernel: KernelType = 'squared_exponential',
          compute_gradients: bool = False) -> Dict:
     """
     Local Approximate Gaussian Process Regression.
@@ -353,6 +357,7 @@ def laGP(Xref: np.ndarray,
             rect=rect,
             verb=verb,
             lite=lite,
+            kernel=kernel,
             compute_gradients=compute_gradients
         )
 
@@ -374,9 +379,9 @@ def laGP(Xref: np.ndarray,
             result['ds2'] = results['ds2']
     elif (start is None and end is None) or end >= n: #full GP implementation
         if compute_gradients:
-            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, compute_gradients=True)
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, kernel=kernel, compute_gradients=True)
         else:
-            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb)
+            results = fullGP(Xref=Xref, X=X, Z=Z, d=d_prior, g=g_prior, lite=lite, verb=verb, kernel=kernel)
         
         result = {
             'mean': results['mean'],
@@ -425,7 +430,7 @@ def alc(gp, Xcand, Xref, verb=0):
     nref = Xref.shape[0]
     
     # Precompute covariance matrix
-    k = covar(Xref, gp.X, gp.d)
+    k = covar(Xref, gp.X, gp.d, gp.kernel)
     
     # Initialize ALC scores
     alc_scores = np.zeros(ncand)
@@ -433,7 +438,7 @@ def alc(gp, Xcand, Xref, verb=0):
     # Calculate the ALC for each candidate    
     if verb > 0:
         print(f"alc: calculating ALC for {ncand} points")
-    mui, gvec, kxy = calc_g_mui_kxy(Xcand, gp.X, gp.Ki, Xref, gp.d, gp.g)
+    mui, gvec, kxy = calc_g_mui_kxy(Xcand, gp.X, gp.Ki, Xref, gp.d, gp.g, gp.kernel)
 
     # Create a mask for valid mui values
     valid_mask = mui > np.finfo(float).eps

@@ -114,6 +114,12 @@ def garg(g: Optional[Union[float, Dict]] = None,
     if 'min' not in g:
         g['min'] = np.sqrt(np.finfo(float).eps)
     
+    if not g['mle'] and g['min'] >= g['max']:
+        if g['max'] < np.sqrt(np.finfo(float).eps):
+            g['min'] = g['max'] / 2.0
+        else:
+            g['min'] = np.sqrt(np.finfo(float).eps)
+
     # Check for priors
     if not g['mle']:
         g['ab'] = [0, 0]

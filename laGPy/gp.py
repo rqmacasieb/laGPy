@@ -10,6 +10,7 @@ from .matrix import *
 from .covar import *
 from .params import *
 from .utils.brent_fmin import brent_fmin
+from .covar import KernelType
 
 @dataclass
 class OptInfo:
@@ -35,7 +36,8 @@ class GP:
     g: float = 0.0         # Nugget parameter
     phi: float = 0.0       # t(Z) @ Ki @ Z
     F: float = 0.0         # Approx Fisher info (optional with dK)
-
+    kernel: KernelType = 'squared_exponential'
+    
     @property
     def m(self) -> int:
         """Number of columns in X"""
@@ -52,7 +54,7 @@ class GP:
         Also updates ldetK (log determinant) and KiZ
         """
         # Calculate covariance matrix
-        self.K = covar_symm(self.X, self.d, self.g)
+        self.K = covar_symm(self.X, self.d, self.g, self.kernel)
         
         try:
             # Calculate Cholesky decomposition
@@ -542,7 +544,7 @@ class GP:
         
         # Build covariance matrix
         if d > 0:
-            self.K = covar_symm(self.X, d, g)
+            self.K = covar_symm(self.X, d, g, self.kernel)
         else:
             self.K = np.eye(self.n)  # identity matrix when d=0
 
@@ -574,7 +576,7 @@ class GP:
 
         # Calculate derivatives and Fisher info if needed
         if self.dK is not None:
-            self.dK, self.d2K = diff_covar_symm(self.X, self.d)
+            self.dK, self.d2K = diff_covar_symm(self.X, self.d, self.kernel)
             self.F = self.fisher_info()
 
     def new_dK(self) -> None:
@@ -586,7 +588,7 @@ class GP:
         assert self.dK is None and self.d2K is None, "Derivative matrices already exist"
         
         # Calculate derivatives of covariance matrix
-        self.dK, self.d2K = diff_covar_symm(self.X, self.d)
+        self.dK, self.d2K = diff_covar_symm(self.X, self.d, self.kernel)
         
         # Calculate Fisher information
         self.F = self.fisher_info()
@@ -651,12 +653,13 @@ class GP:
                     dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
                     
                     # ∂μ/∂x = ∂k/∂x @ Ki @ Z
-                    dmean[i, j] = dk_dx @ self.Ki @ self.Z
+                    grad_value = dk_dx @ self.Ki @ self.Z
+                    dmean[i, j] = float(np.asarray(grad_value).item())
                     
                     # ∂σ²/∂x = -phidf * ∂(ktKik)/∂x
                     # ∂(ktKik)/∂x = 2 * ∂k/∂x @ Ki @ k.T
                     dktKik_dx = 2.0 * dk_dx @ self.Ki @ k[i:i+1].T
-                    ds2[i, j] = -phidf * dktKik_dx
+                    ds2[i, j] = float(np.asarray(-phidf * dktKik_dx).item())
             
             result["dmean"] = dmean
             result["ds2"] = ds2
@@ -687,10 +690,10 @@ class GP:
         g = np.sqrt(np.finfo(float).eps) if nonug else self.g
         
         mean = np.zeros(nn)
-        Sigma = covar_symm(Xref, self.d, g)
+        Sigma = covar_symm(Xref, self.d, g, self.kernel)
         
         # Calculate covariance between training and test points
-        k = covar(Xref, self.X, self.d)
+        k = covar(Xref, self.X, self.d, self.kernel)
         
         df = float(self.n)
         phidf = self.phi / df
@@ -756,7 +759,8 @@ class GP:
                 for j in range(m):
                     # Calculate ∂k/∂x_j for point i
                     dk_dx = self.compute_dk_dx(Xref[i:i+1], self.X, j)
-                    dmean[i, j] = dk_dx @ Ki @ Z
+                    result = dk_dx @ Ki @ Z
+                    dmean[i, j] = float(np.asarray(result).item())
             
             # Calculate derivatives of variance: ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
             for i in range(nn):
@@ -767,7 +771,9 @@ class GP:
                     # ∂σ²/∂x = 2 * phidf * (∂k/∂x @ Ki @ k.T - k @ Ki @ ∂k/∂x.T)
                     term1 = dk_dx @ Ki @ k[i:i+1].T
                     term2 = k[i:i+1] @ Ki @ dk_dx_T
-                    ds2[i, j] = 2.0 * phidf * (term1 - term2)
+
+                    result = 2.0 * phidf * (term1 - term2)
+                    ds2[i, j] = float(np.asarray(result).item())
 
     def new_predutilGP_lite(self, nn: int, XX: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -783,7 +789,7 @@ class GP:
             ktKik: Diagonal of ktKi @ k
         """
         # Calculate covariance between training and test points
-        k = covar(XX, self.X, self.d)
+        k = covar(XX, self.X, self.d, self.kernel)
         
         # Calculate ktKi and ktKik
         ktKi = k @ self.Ki
@@ -815,18 +821,52 @@ class GP:
         Returns:
             Derivative of covariance vector (1, n)
         """
-        # Calculate squared distances
-        D = distance(x, X)
-        
-        # Calculate covariance
-        k = np.exp(-D / self.d)
-        
-        # Calculate derivative
-        dk_dx = -2 * k * (x[0, dim] - X[:, dim]) / self.d
-       
-        return dk_dx
+        from .utils.distance import distance
 
-def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float, 
+        # Calculate squared distances
+        D_sq = distance(x, X)  # Returns squared distances
+        D = np.sqrt(np.maximum(D_sq, 0))  # Euclidean distances
+        
+        if D_sq.ndim == 2:
+            D_sq = D_sq[0, :]  
+            D = D[0, :] if D.ndim == 2 else D
+        
+        x_diff = x[0, dim] - X[:, dim]
+        
+        if self.kernel == 'squared_exponential':
+            # k = exp(-||x-x'||²/d)
+            # dk/dx = -2 * k * (x - x') / d
+            k = np.exp(-D_sq / self.d)
+            dk_dx = -2 * k * x_diff / self.d
+            
+        elif self.kernel == 'exponential':
+            # k = exp(-||x-x'||/d)
+            # dk/dx = -k * (x - x') / (d * ||x-x'||)
+            k = np.exp(-D / self.d)
+            D_safe = np.maximum(D, np.finfo(float).eps)
+            dk_dx = -k * x_diff / (self.d * D_safe)
+            
+        elif self.kernel == 'matern32':
+            # k = (1 + √3*r/d) * exp(-√3*r/d), where r = ||x-x'||
+            # dk/dx = -3 * (x - x') * exp(-√3*r/d) / d²
+            sqrt3 = np.sqrt(3)
+            sqrt3_D_d = sqrt3 * D / self.d
+            k = (1 + sqrt3_D_d) * np.exp(-sqrt3_D_d)
+            dk_dx = -3 * x_diff * np.exp(-sqrt3_D_d) / self.d**2
+            
+        elif self.kernel == 'matern52':
+            # k = (1 + √5*r/d + 5*r²/(3*d²)) * exp(-√5*r/d)
+            # dk/dx = -5 * (x - x') * (1 + √5*r/d) * exp(-√5*r/d) / (3*d²)
+            sqrt5 = np.sqrt(5)
+            sqrt5_D_d = sqrt5 * D / self.d
+            k = (1 + sqrt5_D_d + 5 * D**2 / (3 * self.d**2)) * np.exp(-sqrt5_D_d)
+            dk_dx = -5 * x_diff * (1 + sqrt5_D_d) * np.exp(-sqrt5_D_d) / (3 * self.d**2)
+        else:
+            raise ValueError(f"Unknown kernel type: {self.kernel}")
+       
+        return np.atleast_1d(dk_dx).flatten()
+
+def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float, kernel: KernelType = 'squared_exponential',
            compute_derivs: bool = False) -> GP:
     """
     Create a new Gaussian Process
@@ -837,12 +877,13 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
         d: Length scale parameter
         g: Nugget parameter
         compute_derivs: Whether to compute derivatives
+        kernel: Kernel type
         
     Returns:
         New GP instance
     """    
     # Calculate covariance matrix
-    K = covar_symm(X, d, g)
+    K = covar_symm(X, d, g, kernel)
     
     # Calculate inverse and log determinant
     L = np.linalg.cholesky(K)
@@ -861,7 +902,7 @@ def newGP(X: np.ndarray, Z: np.ndarray, d: float, g: float,
         phi = Z @ KiZ
     
     gp = GP(X=X, K=K, Ki=Ki, Z=Z, KiZ=KiZ, 
-            ldetK=ldetK, d=d, g=g, phi=phi)
+            ldetK=ldetK, d=d, g=g, phi=phi, kernel=kernel)
     
     if compute_derivs:
         gp.new_dK()
@@ -883,7 +924,7 @@ def updateGP(gp: GP, X_new: np.ndarray, Z_new: np.ndarray) -> GP:
     gp.Z = np.concatenate([gp.Z, Z_new])
     
     # Recalculate covariance matrix
-    gp.K = covar_symm(gp.X, gp.d, gp.g)
+    gp.K = covar_symm(gp.X, gp.d, gp.g, gp.kernel)
     
     # Update inverse and log determinant
     try:
@@ -921,6 +962,7 @@ def buildGP(X: np.ndarray,
          wdir: str = '.',
          fname: str = 'GPRmodel.gp',
          export: bool = True,
+         kernel: KernelType = 'squared_exponential',
          verb: int = 0) -> GP:
     """
     Builds GP for Gaussian Process Regression. 
@@ -934,6 +976,7 @@ def buildGP(X: np.ndarray,
         wdir: Directory to save the GP model
         fname: Name of the GP model file
         export: Whether to export the GP model to a file
+        kernel: Kernel type
         verb: Verbosity level
         
     Returns:
@@ -949,10 +992,9 @@ def buildGP(X: np.ndarray,
     d_prior = darg(d, X)
     g_prior = garg(g, Z)
     
-    gp = newGP(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'))
+    gp = newGP(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'), kernel=kernel)
     optimize_parameters(gp, d_prior, g_prior, verb)
 
-    #if required, save GP model to file that can be readily imported
     if export:
         full_path = os.path.join(wdir, fname)
         with open(full_path, 'wb') as file:
@@ -975,15 +1017,11 @@ def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
     """
 
     if fname:
-        # If a filename is provided, construct the full path
         full_path = os.path.join(wdir, fname)
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"The specified file '{fname}' does not exist in the directory.")
     else:
-        # List all files in the specified directory
         files = os.listdir(wdir)
-        
-        # Filter for files with a .gp extension
         gp_files = [f for f in files if f.endswith('.gp')]
         
         if not gp_files:
@@ -991,9 +1029,13 @@ def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
         
         if len(gp_files) > 1:
             raise ValueError("Multiple .gp files found. Please specify a specific filename.")
-        
-        # Use the first .gp file found
+
         full_path = os.path.join(wdir, gp_files[0])
     
     with open(full_path, 'rb') as file:
-        return pickle.load(file)
+        gp = pickle.load(file)
+    
+    if not hasattr(gp, 'kernel'):
+        gp.kernel = 'squared_exponential'
+    
+    return gp
