@@ -995,7 +995,6 @@ def buildGP(X: np.ndarray,
     gp = newGP(X, Z, get_value(d_prior, 'start'), get_value(g_prior, 'start'), kernel=kernel)
     optimize_parameters(gp, d_prior, g_prior, verb)
 
-    #if required, save GP model to file that can be readily imported
     if export:
         full_path = os.path.join(wdir, fname)
         with open(full_path, 'wb') as file:
@@ -1018,15 +1017,11 @@ def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
     """
 
     if fname:
-        # If a filename is provided, construct the full path
         full_path = os.path.join(wdir, fname)
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"The specified file '{fname}' does not exist in the directory.")
     else:
-        # List all files in the specified directory
         files = os.listdir(wdir)
-        
-        # Filter for files with a .gp extension
         gp_files = [f for f in files if f.endswith('.gp')]
         
         if not gp_files:
@@ -1034,9 +1029,13 @@ def loadGP(wdir: str = '.', fname: Optional[str] = None) -> GP:
         
         if len(gp_files) > 1:
             raise ValueError("Multiple .gp files found. Please specify a specific filename.")
-        
-        # Use the first .gp file found
+
         full_path = os.path.join(wdir, gp_files[0])
     
     with open(full_path, 'rb') as file:
-        return pickle.load(file)
+        gp = pickle.load(file)
+    
+    if not hasattr(gp, 'kernel'):
+        gp.kernel = 'squared_exponential'
+    
+    return gp
